@@ -328,3 +328,13 @@
 
 /* ---------- Mô tả trang (data-page-description) ---------- */
 :root[data-page-description="hidden"] [data-slot="page-description"] { display: none; }
+
+/* ---------- Cờ quốc gia (LocaleFlag – nút chọn ngôn ngữ) ----------
+ * Màu theo quy định của lá cờ: CỐ ĐỊNH, không đổi theo sáng/tối hay thương hiệu. */
+:root {
+  --kb-color-flag-red: light-dark(#DA251D, #DA251D);
+  --kb-color-flag-yellow: light-dark(#FFDE00, #FFDE00);
+  --kb-color-flag-blue: light-dark(#012169, #012169);
+  --kb-color-flag-white: light-dark(#FFFFFF, #FFFFFF);
+  --kb-color-flag-uk-red: light-dark(#C8102E, #C8102E);
+}

@@ -1,6 +1,6 @@
 "use client";
 // Tài khoản VNACCS của doanh nghiệp (thẻ Customs Hub). Mật khẩu/terminal key chỉ đi một chiều lên máy chủ, không bao giờ hiện lại.
-import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Input, Skeleton, Stack, fill, toast, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Input, PasswordInput, Skeleton, Stack, fill, toast, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -61,13 +61,13 @@ function VnaccsDialog({ open, onOpenChange, current }: { open: boolean; onOpenCh
               <Input value={form.userId} onChange={set("userId")} autoComplete="off" className="font-mono" placeholder="BI820001" />
             </Field>
             <Field label={t.password} required hint={current.userId ? t.passwordHint : undefined} {...errorProp(errors.password)}>
-              <Input type="password" value={form.password} onChange={set("password")} autoComplete="new-password" />
+              <PasswordInput placeholder={t.passwordPlaceholder} value={form.password} onChange={set("password")} autoComplete="new-password" />
             </Field>
             <Field label={t.terminalId} required {...errorProp(errors.terminalId)}>
               <Input value={form.terminalId} onChange={set("terminalId")} autoComplete="off" className="font-mono" placeholder="Z9999M" />
             </Field>
             <Field label={t.terminalAccessKey} required {...errorProp(errors.terminalAccessKey)}>
-              <Input type="password" value={form.terminalAccessKey} onChange={set("terminalAccessKey")} autoComplete="off" className="font-mono" />
+              <PasswordInput placeholder={t.terminalAccessKeyPlaceholder} value={form.terminalAccessKey} onChange={set("terminalAccessKey")} autoComplete="off" className="font-mono" />
             </Field>
           </Stack>
           <DialogFooter>

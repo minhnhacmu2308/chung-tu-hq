@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Checkbox, Field, Input, Stack, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Checkbox, Field, Input, PasswordInput, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -65,7 +65,7 @@ export function LoginPage() {
             <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.emailExample} />
           </Field>
           <Field label={t.password} required {...(errors.password ? { error: errors.password } : {})}>
-            <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput autoComplete="current-password" placeholder={t.passwordPlaceholder} value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Checkbox label={t.remember} defaultChecked />

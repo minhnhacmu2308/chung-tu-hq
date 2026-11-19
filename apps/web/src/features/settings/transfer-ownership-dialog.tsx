@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Input, Stack, fill, toast, useMessages } from "@kb/ui";
+import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, PasswordInput, Stack, fill, toast, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Crown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -48,7 +48,7 @@ export function TransferOwnershipDialog({ target, onOpenChange }: { target: Memb
           <Stack gap="md">
             {transfer.isError && <Alert tone="danger">{transfer.error.message}</Alert>}
             <Field label={t.transferPassword} hint={t.transferPasswordHint} required>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
+              <PasswordInput placeholder={t.transferPasswordPlaceholder} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
             </Field>
           </Stack>
           <DialogFooter>

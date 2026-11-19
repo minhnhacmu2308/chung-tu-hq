@@ -1,6 +1,6 @@
 "use client";
 // Nhận lời mời (liên kết /accept-invite?token=… trong email mời thành viên): đặt họ tên + mật khẩu → server cấp phiên → vào ứng dụng.
-import { Alert, Button, Field, Input, Stack, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Field, Input, PasswordInput, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -76,10 +76,10 @@ export function AcceptInvitePage({ token }: { token: string }) {
           </Field>
           <div className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
             <Field label={t.password} required hint={c.passwordHint} {...err(errors.password)}>
-              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setField("password", e.target.value)} placeholder={c.passwordPlaceholder} />
+              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setField("password", e.target.value)} placeholder={c.passwordPlaceholder} />
             </Field>
             <Field label={c.confirm} required {...err(errors.confirm)}>
-              <Input type="password" autoComplete="new-password" value={form.confirm} onChange={(e) => setField("confirm", e.target.value)} placeholder={c.confirmPlaceholder} />
+              <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => setField("confirm", e.target.value)} placeholder={c.confirmPlaceholder} />
             </Field>
           </div>
           <Button type="submit" fullWidth loading={accept.isPending || accept.isSuccess}>{t.submit}</Button>

@@ -40,6 +40,11 @@
 @theme inline {
   --color-transparent: transparent;
   --color-current: currentColor;
+  --color-flag-red: var(--kb-color-flag-red);
+  --color-flag-yellow: var(--kb-color-flag-yellow);
+  --color-flag-blue: var(--kb-color-flag-blue);
+  --color-flag-white: var(--kb-color-flag-white);
+  --color-flag-uk-red: var(--kb-color-flag-uk-red);
 
   --color-bg: var(--kb-color-bg);
   --color-surface: var(--kb-color-surface);

@@ -1,7 +1,7 @@
 "use client";
 // Đặt lại mật khẩu (liên kết /reset-password?token=… trong email quên mật khẩu, và email mời quản trị viên hệ thống).
 // Thành công → mọi phiên cũ bị hủy ở server, người dùng đăng nhập lại bằng mật khẩu mới.
-import { Alert, Button, Field, Input, Stack, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Field, PasswordInput, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
@@ -76,10 +76,10 @@ export function ResetPasswordPage({ token }: { token: string }) {
         <Stack gap="md">
           {reset.isError && <Alert tone="danger" title={c.failed}>{errorText(reset.error, locale)}</Alert>}
           <Field label={t.password} required hint={c.passwordHint} {...err(errors.password)}>
-            <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setField("password", e.target.value)} placeholder={c.passwordPlaceholder} />
+            <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setField("password", e.target.value)} placeholder={c.passwordPlaceholder} />
           </Field>
           <Field label={c.confirm} required {...err(errors.confirm)}>
-            <Input type="password" autoComplete="new-password" value={form.confirm} onChange={(e) => setField("confirm", e.target.value)} placeholder={c.confirmPlaceholder} />
+            <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => setField("confirm", e.target.value)} placeholder={c.confirmPlaceholder} />
           </Field>
           <Button type="submit" fullWidth loading={reset.isPending}>{t.submit}</Button>
         </Stack>

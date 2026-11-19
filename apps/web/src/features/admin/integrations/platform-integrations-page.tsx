@@ -50,7 +50,7 @@ function KeyDialog({ integration, onClose }: { integration: PlatformIntegration 
       <Alert tone="warning">{t.keyWarning}</Alert>
       {/* Thông báo của schema (@kb/contracts) chỉ có tiếng Việt: ngôn ngữ khác dùng nhãn chung. */}
       <Field label={t.newKey} required hint={t.newKeyHint} {...(apiKey !== "" && !check.success ? { error: locale === "vi" ? check.error.issues[0]?.message : t.keyInvalid } : {})}>
-        <PasswordInput autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="font-mono" />
+        <PasswordInput autoComplete="off" placeholder={t.newKeyPlaceholder} value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="font-mono" />
       </Field>
     </ReasonDialog>
   );

@@ -15,7 +15,7 @@ export type LocaleFlagProps = {
   locale: UiLocale;
   /** Mặc định 20×14px. */
   className?: string;
-  /** Tên truy cập; bỏ trống = trang trí (`aria-hidden`), khi chữ tên ngôn ngữ đã đứng cạnh. */
+  /** Tên truy cập + chú thích khi rê chuột (`<title>`); bỏ trống = trang trí (`aria-hidden`), khi chữ tên ngôn ngữ đã đứng cạnh. */
   label?: string;
 };
 
@@ -29,6 +29,7 @@ export function LocaleFlag({ locale, className, label }: LocaleFlagProps) {
       className={cn("h-3.5 w-5 shrink-0 overflow-hidden rounded-sm ring-1 ring-border", className)}
       {...a11y}
     >
+      {label && <title>{label}</title>}
       {locale === "vi" && (
         <>
           <rect width="30" height="20" className="fill-flag-red" />

@@ -26,7 +26,7 @@ function useLocaleSetting() {
   return { locale: appearance.locale, setLocale };
 }
 
-/** Chọn ngôn ngữ bằng lá cờ (tên ngôn ngữ là tên truy cập + tooltip) – dùng ở trang chưa đăng nhập (đăng nhập, đăng ký). */
+/** Chọn ngôn ngữ bằng lá cờ (tên ngôn ngữ là tên truy cập + chú thích khi rê chuột) – dùng ở trang chưa đăng nhập (đăng nhập, đăng ký). */
 export function LanguageSelect({ className }: { className?: string }) {
   const t = useMessages(LANGUAGE_MESSAGES);
   const { locale, setLocale } = useLocaleSetting();

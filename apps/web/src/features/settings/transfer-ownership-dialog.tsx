@@ -48,7 +48,7 @@ export function TransferOwnershipDialog({ target, onOpenChange }: { target: Memb
           <Stack gap="md">
             {transfer.isError && <Alert tone="danger">{transfer.error.message}</Alert>}
             <Field label={t.transferPassword} hint={t.transferPasswordHint} required>
-              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
+              <PasswordInput placeholder={t.transferPasswordPlaceholder} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
             </Field>
           </Stack>
           <DialogFooter>

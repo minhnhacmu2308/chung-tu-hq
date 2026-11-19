@@ -1,6 +1,6 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Check, ChevronDown, Eye, EyeOff, Search } from "lucide-react";
-import { useMessages } from "../lib/i18n.js";
+import { useMessages, type Messages } from "../lib/i18n.js";
 import { matchesSearch } from "./combobox.js";
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
@@ -78,7 +78,7 @@ const PASSWORD_MESSAGES = {
   vi: { show: "Hiện mật khẩu", hide: "Ẩn mật khẩu" },
   en: { show: "Show password", hide: "Hide password" },
   zh: { show: "显示密码", hide: "隐藏密码" },
-};
+} satisfies Messages<"show" | "hide">;
 
 export type PasswordInputProps = Omit<ComponentProps<"input">, "type" | "className"> & {
   /** Bề rộng/bố cục của cả ô (nút mắt nằm trong viền). */

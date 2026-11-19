@@ -90,10 +90,10 @@ export function RegisterPage() {
             </Field>
             <div className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
               <Field label={t.password} required {...err(accountErrors.password)}>
-                <PasswordInput autoComplete="new-password" value={account.password} onChange={(e) => setField("password", e.target.value)} />
+                <PasswordInput autoComplete="new-password" placeholder={t.passwordPlaceholder} value={account.password} onChange={(e) => setField("password", e.target.value)} />
               </Field>
               <Field label={t.confirm} required {...err(accountErrors.confirm)}>
-                <PasswordInput autoComplete="new-password" value={account.confirm} onChange={(e) => setField("confirm", e.target.value)} />
+                <PasswordInput autoComplete="new-password" placeholder={t.confirmPlaceholder} value={account.confirm} onChange={(e) => setField("confirm", e.target.value)} />
               </Field>
             </div>
             <Button type="submit" fullWidth>{t.continue}</Button>

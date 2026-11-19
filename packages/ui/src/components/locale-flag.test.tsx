@@ -13,6 +13,7 @@ describe("LocaleFlag", () => {
       </div>,
     );
     expect(screen.getByRole("img", { name: "Tiếng Việt" })).toBeInTheDocument();
+    expect(screen.getByTitle("Tiếng Việt")).toBeInTheDocument();
     expect(container.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(2);
     await expectNoA11yViolations(container);
   });

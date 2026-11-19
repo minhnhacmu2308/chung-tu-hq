@@ -65,7 +65,7 @@ export function LoginPage() {
             <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.emailExample} />
           </Field>
           <Field label={t.password} required {...(errors.password ? { error: errors.password } : {})}>
-            <PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput autoComplete="current-password" placeholder={t.passwordPlaceholder} value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Checkbox label={t.remember} defaultChecked />

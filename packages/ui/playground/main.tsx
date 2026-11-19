@@ -6,7 +6,7 @@ import "../src/styles/index.css";
 import {
   Alert, AppearancePanel, AssistantLauncher, CursorEffect, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
   CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent, RadioGroup,
-  DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, LookupInput, PageHeader, PasswordInput, Select, Skeleton, Spinner, Stack,
+  DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, LocaleFlag, LookupInput, PageHeader, PasswordInput, SegmentedControl, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
   BrandDot, Sidebar, SidebarFooterButton, SidebarUser, type NavItem,
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
@@ -198,6 +198,7 @@ function Demo() {
                       <Field label="Mật khẩu" framed hint="PasswordInput – nút mắt hiện/ẩn mật khẩu nằm trong viền ô">
                         <PasswordInput autoComplete="new-password" placeholder="Nhập mật khẩu" />
                       </Field>
+                      <SegmentedControl label="Ngôn ngữ – LocaleFlag trong SegmentedControl" value="vi" onChange={() => undefined} options={(["vi", "en", "zh"] as const).map((l) => ({ value: l, label: <LocaleFlag locale={l} label={{ vi: "Tiếng Việt", en: "English", zh: "中文" }[l]} className="h-4 w-6" /> }))} />
                       <FieldFrame legend="1.27 · Số kiện">
                         <Field label="Số lượng kiện"><Input placeholder="1" /></Field>
                       </FieldFrame>

@@ -61,13 +61,13 @@ function VnaccsDialog({ open, onOpenChange, current }: { open: boolean; onOpenCh
               <Input value={form.userId} onChange={set("userId")} autoComplete="off" className="font-mono" placeholder="BI820001" />
             </Field>
             <Field label={t.password} required hint={current.userId ? t.passwordHint : undefined} {...errorProp(errors.password)}>
-              <PasswordInput value={form.password} onChange={set("password")} autoComplete="new-password" />
+              <PasswordInput placeholder={t.passwordPlaceholder} value={form.password} onChange={set("password")} autoComplete="new-password" />
             </Field>
             <Field label={t.terminalId} required {...errorProp(errors.terminalId)}>
               <Input value={form.terminalId} onChange={set("terminalId")} autoComplete="off" className="font-mono" placeholder="Z9999M" />
             </Field>
             <Field label={t.terminalAccessKey} required {...errorProp(errors.terminalAccessKey)}>
-              <PasswordInput value={form.terminalAccessKey} onChange={set("terminalAccessKey")} autoComplete="off" className="font-mono" />
+              <PasswordInput placeholder={t.terminalAccessKeyPlaceholder} value={form.terminalAccessKey} onChange={set("terminalAccessKey")} autoComplete="off" className="font-mono" />
             </Field>
           </Stack>
           <DialogFooter>

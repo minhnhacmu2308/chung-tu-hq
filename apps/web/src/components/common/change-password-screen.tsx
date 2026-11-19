@@ -61,13 +61,13 @@ export function ChangePasswordScreen() {
             <Stack gap="md">
               {change.isError && <Alert tone="danger" title={t.failed}>{errorText(change.error, locale)}</Alert>}
               <Field label={t.current} required {...(errors.current ? { error: errors.current } : {})}>
-                <PasswordInput autoComplete="current-password" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} autoFocus />
+                <PasswordInput autoComplete="current-password" placeholder={t.currentPlaceholder} value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} autoFocus />
               </Field>
               <Field label={t.next} hint={t.nextHint} required {...(errors.next ? { error: errors.next } : {})}>
-                <PasswordInput autoComplete="new-password" value={form.next} onChange={(e) => setForm({ ...form, next: e.target.value })} />
+                <PasswordInput autoComplete="new-password" placeholder={t.nextPlaceholder} value={form.next} onChange={(e) => setForm({ ...form, next: e.target.value })} />
               </Field>
               <Field label={t.confirm} required {...(errors.confirm ? { error: errors.confirm } : {})}>
-                <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
+                <PasswordInput autoComplete="new-password" placeholder={t.confirmPlaceholder} value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
               </Field>
               <Button type="submit" fullWidth loading={change.isPending}>{t.submit}</Button>
               <Button type="button" variant="secondary" fullWidth onClick={signOut}>{t.signOut}</Button>

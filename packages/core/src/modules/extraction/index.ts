@@ -3,6 +3,7 @@ export { AiDataError, PIPELINE_VERSION, PROMPT_VERSION } from "./application/por
 export { processDocument, type ProcessDocumentInput } from "./application/process-document.js";
 export { listFields } from "./application/list-fields.js";
 export { updateFieldValue } from "./application/update-field-value.js";
+export { updateFieldValues } from "./application/update-field-values.js";
 export { confirmField } from "./application/confirm-field.js";
 export { revertField } from "./application/revert-field.js";
 export { finishReading } from "./application/finish-reading.js";

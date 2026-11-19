@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Danh sách hàng hóa ở bước đọc chứng từ: bảng chung (tìm, lọc "Cần kiểm tra", xác nhận nhiều dòng), mô tả không bị cắt,
 // Enter lưu và xuống ô cùng cột ở dòng dưới.
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
@@ -26,7 +26,7 @@ function line(n: number, desc: string, suspect = false) {
 const FIELDS = Array.from({ length: 30 }, (_, i) => line(i + 1, i === 0 ? "Double-side LCD fold-out display module for kiosk" : `Hàng ${i + 1}`, i === 2 || i === 6)).flat();
 
 function setup() {
-  const props = { onActivate: vi.fn(), onSave: vi.fn(), onConfirm: vi.fn() };
+  const props = { onActivate: vi.fn(), onSave: vi.fn(), onSaveMany: vi.fn(async () => []), onConfirm: vi.fn() };
   const r = renderWithProviders(<ItemsTable fields={FIELDS} activeId={null} {...props} />);
   return { ...props, ...r };
 }
@@ -48,7 +48,7 @@ describe("ItemsTable", () => {
   }, 30_000); // dựng 30 dòng × nhiều ô – máy bận (chạy cả bộ) vượt 5 giây mặc định
 
   it("activeId ở dòng trang sau (bấm vị trí trên chứng từ) → tự sang trang chứa dòng đó", () => {
-    const props = { onActivate: vi.fn(), onSave: vi.fn(), onConfirm: vi.fn() };
+    const props = { onActivate: vi.fn(), onSave: vi.fn(), onSaveMany: vi.fn(async () => []), onConfirm: vi.fn() };
     const { rerender } = renderWithProviders(<ItemsTable fields={FIELDS} activeId={null} {...props} />);
     expect(screen.queryByRole("textbox", { name: "quantity 25" })).toBeNull();
     rerender(<ItemsTable fields={FIELDS} activeId="f_25_amount" {...props} />);
@@ -72,21 +72,53 @@ describe("ItemsTable", () => {
     expect(onConfirm.mock.calls.map((c) => c[0])).toEqual(["f_3_amount", "f_7_amount"]);
   });
 
-  it("chọn nhiều dòng → 'Áp xuất xứ cho n dòng' lưu xuất xứ từng dòng đã chọn (bỏ dòng đã đúng nước)", async () => {
-    const fields = [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "Shrimp").filter((f) => f.key !== "item.3.origin"), cell(3, "origin", "JP")];
+  // Áp xuất xứ cho nhiều dòng: 1 lần lưu hàng loạt (lưu từng ô song song làm máy chủ ghi đè dữ liệu lô hàng – chỉ 1 dòng ăn).
+  const originFields = () => [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "Shrimp").filter((f) => f.key !== "item.3.origin"), cell(3, "origin", "JP")];
+  const pickOrigin = async (n: number, code: string) => {
+    await userEvent.click(screen.getByRole("combobox", { name: `Áp xuất xứ cho ${n} dòng` }));
+    await userEvent.keyboard(code);
+    await userEvent.click(await screen.findByRole("option", { name: new RegExp(`^${code} – `) }, { timeout: 5000 }));
+  };
+
+  it("chọn nhiều dòng → 'Áp xuất xứ cho n dòng' lưu MỘT lần cho các dòng khác nước, báo số dòng đã đặt + giữ nguyên, bỏ chọn", async () => {
     const onSave = vi.fn();
-    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={onSave} onConfirm={vi.fn()} />);
+    const onSaveMany = vi.fn(async () => []);
+    renderWithProviders(<ItemsTable fields={originFields()} activeId={null} onActivate={vi.fn()} onSave={onSave} onSaveMany={onSaveMany} onConfirm={vi.fn()} />);
+    for (const n of [1, 2, 3]) await userEvent.click(screen.getByRole("checkbox", { name: `Chọn dòng Dòng ${n}` }));
+    await pickOrigin(3, "JP");
+    expect(onSaveMany).toHaveBeenCalledTimes(1);
+    expect(onSaveMany).toHaveBeenCalledWith([{ id: "f_1_origin", value: "JP" }, { id: "f_2_origin", value: "JP" }]);
+    expect(onSave).not.toHaveBeenCalled();
+    expect((await screen.findAllByText("Đã đặt xuất xứ JP cho 2 dòng")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 dòng đã có xuất xứ JP – giữ nguyên").length).toBeGreaterThan(0);
+    expect((screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("mọi dòng đã chọn đã đúng nước → không gọi lưu, chỉ báo giữ nguyên", async () => {
+    const onSaveMany = vi.fn(async () => []);
+    const fields = [...line(1, "Frozen fish").filter((f) => f.key !== "item.1.origin"), cell(1, "origin", "KR"), ...line(2, "Squid")];
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={onSaveMany} onConfirm={vi.fn()} />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
-    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 3" }));
-    await userEvent.click(screen.getByRole("combobox", { name: "Áp xuất xứ cho 2 dòng" }));
-    await userEvent.keyboard("JP");
-    await userEvent.click(await screen.findByRole("option", { name: /^JP – / }, { timeout: 5000 }));
-    expect(onSave.mock.calls).toEqual([["f_1_origin", "JP"]]);
+    await pickOrigin(1, "KR");
+    expect(onSaveMany).not.toHaveBeenCalled();
+    expect((await screen.findAllByText("1 dòng đã có xuất xứ KR – giữ nguyên")).length).toBeGreaterThan(0);
+  });
+
+  it("lưu hàng loạt lỗi → giữ các dòng đang chọn để thử lại, không báo thành công", async () => {
+    const onSaveMany = vi.fn(async () => { throw new Error("500"); });
+    renderWithProviders(<ItemsTable fields={originFields()} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={onSaveMany} onConfirm={vi.fn()} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 2" }));
+    await pickOrigin(2, "VN");
+    await waitFor(() => expect(onSaveMany).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Áp xuất xứ cho 2 dòng" }).hasAttribute("disabled")).toBe(false));
+    expect(screen.queryAllByText("Đã đặt xuất xứ VN cho 2 dòng")).toHaveLength(0);
+    expect((screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }) as HTMLInputElement).checked).toBe(true);
   });
 
   it("gộp dòng: nhiều nhóm → hiện 3 nhóm đầu, 'Xem thêm' mở hết, 'Thu gọn' về 3", async () => {
     const fields = Array.from({ length: 5 }, (_, i) => [...line(i + 1, `Item ${i + 1}`), ...line(i + 6, `Item ${i + 1}`)]).flat();
-    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
     expect(screen.getAllByText(/^Dòng \d+, \d+ →/)).toHaveLength(3);
     await userEvent.click(screen.getByRole("button", { name: "Xem thêm 2 nhóm" }));
     expect(screen.getAllByText(/^Dòng \d+, \d+ →/)).toHaveLength(5);
@@ -106,7 +138,7 @@ describe("ItemsTable", () => {
   it("xuất xứ: ô chọn nước; dòng hóa đơn không ghi xuất xứ → ô trống báo lỗi, dòng tô vàng; chọn nước → lưu mã", async () => {
     const fields = [...line(1, "Frozen fish").filter((f) => f.key !== "item.1.origin"), cell(1, "origin", ""), ...line(2, "Squid")];
     const onSave = vi.fn();
-    const { container } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={onSave} onConfirm={vi.fn()} />);
+    const { container } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={onSave} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} />);
     const empty = screen.getByRole("combobox", { name: "origin 1" });
     expect(empty.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByRole("combobox", { name: "origin 2" }).getAttribute("aria-invalid")).not.toBe("true");
@@ -122,23 +154,23 @@ describe("ItemsTable", () => {
   it("gộp dòng: có dòng giống nhau → đề xuất 'Gộp dòng' (bấm → bật cờ); đã gộp → 'Tách lại'; không có merge → không hiện", async () => {
     const fields = [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "frozen  FISH")];
     const onChange = vi.fn();
-    const { unmount } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange }} />);
+    const { unmount } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange }} />);
     expect(screen.getByText("Có 1 nhóm dòng hàng cùng loại – gộp mỗi nhóm thành 1 dòng?")).toBeTruthy();
     expect(screen.getByText("Dòng 1, 3 → “Frozen fish”")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Gộp dòng" }));
     expect(onChange).toHaveBeenCalledWith(true);
     unmount();
-    const r2 = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: true, busy: false, onChange }} />);
+    const r2 = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} merge={{ merged: true, busy: false, onChange }} />);
     await userEvent.click(screen.getByRole("button", { name: "Tách lại" }));
     expect(onChange).toHaveBeenLastCalledWith(false);
     r2.unmount();
-    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} />);
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Gộp dòng" })).toBeNull();
   });
 
   it("gộp dòng cùng tên hàng gốc, khác size: đề xuất kèm tên dòng gộp gom size, bỏ số carton", () => {
     const fields = [...line(1, "Octopus, size 1, 10 cartons"), ...line(2, "Octopus, size 2, 5 cartons"), ...line(3, "Squid")];
-    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onSaveMany={vi.fn(async () => [])} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
     expect(screen.getByText("Dòng 1, 2 → “Octopus, size 1, 2”")).toBeTruthy();
   });
 });

@@ -32,7 +32,7 @@ export function TransferOwnershipDialog({ target, onOpenChange }: { target: Memb
     }
   }, [open, reset]);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} defaultPresentation="modal">
       <DialogContent
         title={t.transferTitle}
         icon={<Crown className="h-4 w-4" />}

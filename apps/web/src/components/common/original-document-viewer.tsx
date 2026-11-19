@@ -33,6 +33,8 @@ export type OriginalDocumentViewerProps = {
   label: string;
   fields: ExtractedField[];
   highlightFieldId?: string | null;
+  /** Trường cần cuộn tới (mặc định = highlightFieldId). */
+  revealFieldId?: string | null;
   onFieldClick?: (fieldId: string) => void;
   fallback: ReactNode;
   className?: string;
@@ -43,7 +45,7 @@ export type OriginalDocumentViewerProps = {
   onTextReady?: (api: DocumentTextApi | null) => void;
 };
 
-export function OriginalDocumentViewer({ document, src, kind, label, fields, highlightFieldId = null, onFieldClick, fallback, className, picking = false, onPick, onTextReady }: OriginalDocumentViewerProps) {
+export function OriginalDocumentViewer({ document, src, kind, label, fields, highlightFieldId = null, revealFieldId, onFieldClick, fallback, className, picking = false, onPick, onTextReady }: OriginalDocumentViewerProps) {
   const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
   const [state, setState] = useState<State>({ status: "loading" });
   const srcRef = useRef(src);
@@ -114,6 +116,7 @@ export function OriginalDocumentViewer({ document, src, kind, label, fields, hig
       regions={regions}
       {...(picking && onPick ? { onAreaSelect: (a: DocumentArea) => onPick(pickFrom(pages, a)) } : {})}
       highlightId={highlightFieldId}
+      {...(revealFieldId !== undefined ? { revealId: revealFieldId } : {})}
       {...(onFieldClick ? { onRegionClick: onFieldClick } : {})}
       toolbarEnd={
         <>

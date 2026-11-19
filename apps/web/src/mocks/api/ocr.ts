@@ -290,6 +290,28 @@ export const updateFieldValue = (fieldId: string, value: string) =>
     return f;
   });
 
+/** Sửa nhiều trường cùng hồ sơ một lần (như PATCH dossiers/:id/fields): một trường lỗi → không sửa trường nào. */
+export const updateFieldValues = (dossierId: string, edits: { id: string; value: string }[]) =>
+  mutate((db): ExtractedField[] => {
+    const fields = edits.map((e) => {
+      const f = db.fields.find((x) => x.id === e.id && db.documents.some((d) => d.id === x.documentId && d.dossierId === dossierId));
+      if (!f) throw new ApiError("NOT_FOUND", "Không tìm thấy trường");
+      const scoped = fieldScopeError(db, f);
+      if (scoped) throw scoped;
+      return f;
+    });
+    return fields.map((f, i) => {
+      f.value = edits[i]!.value.trim();
+      f.status = "USER_CONFIRMED";
+      f.confirmedBy = db.currentUserId;
+      f.confirmedAt = nowIso();
+      syncSuspectCount(db, f.documentId);
+      syncLineItem(db, f);
+      syncTerms(db, f);
+      return f;
+    });
+  });
+
 /** Bấm "Đúng": xác nhận giá trị AI đọc. */
 export const confirmField = (fieldId: string) =>
   mutate((db): ExtractedField => {

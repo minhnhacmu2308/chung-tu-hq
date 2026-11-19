@@ -24,7 +24,7 @@ type Props = {
 export function UnsavedDialog({ open, title, count, leaving = false, saving, onSave, onDiscard, onStay, onClosed }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && !saving && onStay()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !saving && onStay()} defaultPresentation="modal">
       <DialogContent
         title={fill(t.saveAt, { title })}
         icon={<Save className="h-4 w-4" />}

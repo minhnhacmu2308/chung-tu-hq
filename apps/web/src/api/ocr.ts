@@ -18,6 +18,7 @@ export const listDocumentSheets = pick(mock.listDocumentSheets, http.listDocumen
 export const downloadDocumentSheets = pick(mock.downloadDocumentSheets, http.downloadDocumentSheets);
 export const listChecks = pick(mock.listChecks, http.listChecks);
 export const updateFieldValue = pick(mock.updateFieldValue, http.updateFieldValue);
+export const updateFieldValues = pick(mock.updateFieldValues, http.updateFieldValues);
 export const confirmField = pick(mock.confirmField, http.confirmField);
 export const revertField = pick(mock.revertField, http.revertField);
 export const finishReading = pick(mock.finishReading, http.finishReading);

@@ -183,6 +183,8 @@ export type DocumentPreviewProps = {
   file?: OriginalFile;
   fields: ExtractedField[];
   highlightFieldId?: string | null;
+  /** Trường cần cuộn tới trong khung (bấm / Tab vào ô). Không truyền → theo highlightFieldId. */
+  revealFieldId?: string | null;
   onFieldClick?: (fieldId: string) => void;
   className?: string;
   /** Chỉ trên file (chỉ khi có file thật): xem OriginalDocumentViewer. */
@@ -191,7 +193,7 @@ export type DocumentPreviewProps = {
   onTextReady?: (api: DocumentTextApi | null) => void;
 };
 
-export function DocumentPreview({ document, file = { status: "none" }, fields, highlightFieldId = null, onFieldClick, className, picking, onPick, onTextReady }: DocumentPreviewProps) {
+export function DocumentPreview({ document, file = { status: "none" }, fields, highlightFieldId = null, revealFieldId, onFieldClick, className, picking, onPick, onTextReady }: DocumentPreviewProps) {
   const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
   const regions = useMemo(() => buildRegions(document, fields, t.emptyPage), [document, fields, t.emptyPage]);
   const pages = useMemo(() => Array.from({ length: Math.max(1, document.pages) }, () => null), [document.pages]);
@@ -227,6 +229,7 @@ export function DocumentPreview({ document, file = { status: "none" }, fields, h
         label={label}
         fields={fields}
         highlightFieldId={highlightFieldId}
+        {...(revealFieldId !== undefined ? { revealFieldId } : {})}
         {...(onFieldClick ? { onFieldClick } : {})}
         {...(picking !== undefined ? { picking } : {})}
         {...(onPick ? { onPick } : {})}
@@ -243,6 +246,7 @@ export function DocumentPreview({ document, file = { status: "none" }, fields, h
       pages={pages}
       regions={regions}
       highlightId={highlightFieldId}
+      {...(revealFieldId !== undefined ? { revealId: revealFieldId } : {})}
       {...(onFieldClick ? { onRegionClick: onFieldClick } : {})}
       {...(className ? { className } : {})}
     />

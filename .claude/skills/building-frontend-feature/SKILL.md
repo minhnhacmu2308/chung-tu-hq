@@ -60,6 +60,7 @@ apps/web/src/
 | Nút Hủy / Đóng / Quay lại / Để sau; chọn variant, size cho mọi nút | Theo `.claude/rules/nut-bam.md`: Hủy/Quay lại = `secondary`, 1 `primary` mỗi vùng, ô/nút trong dòng bảng cao 32px (`Combobox size="sm"`) | `ghost` chỉ có chữ cho Hủy/Quay lại; hai nút chính; ô lệch chiều cao |
 | Xác nhận xóa / hủy / ngắt kết nối (thao tác khó quay lại) | `ConfirmDialog` (`icon`, `subject`, hậu quả làm `children`, `irreversible` khi xóa vĩnh viễn, `loading`) | `Dialog` + `<p className="text-fg-muted">` + nút đỏ tự ghép |
 | Ô nhập có nút tra cứu (mã danh mục, mã HS…) | `LookupInput` – kính lúp trong viền ô; ô mã VNACCS dùng sẵn `CodeInput` (`features/declaration-form`) | `Input` + `Button` kính lúp rời |
+| Ô mật khẩu / khóa bí mật | `PasswordInput` – nút mắt hiện/ẩn trong viền ô | `Input type="password"` trơn |
 | Chọn trong danh sách | `Select` – từ 6 lựa chọn tự có ô tìm không dấu; rất dài / tải từ server / chọn nhiều → `Combobox` | Tự ghép ô lọc phía trên; tắt `searchable` không lý do |
 | Chữ gợi ý ô nhập | `placeholder` từ `*.messages.ts` ("Nhập mã", "Nhập <tên chỉ tiêu>", "Nhập số") | Ô trống không gợi ý |
 | Ô nhập trong panel sửa một chỉ tiêu | `FormField fill` – mọi loại ô full chiều rộng | Ô mã/ngày ngắn hơn ô chữ cùng panel |

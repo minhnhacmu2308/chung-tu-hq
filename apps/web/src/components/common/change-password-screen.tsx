@@ -1,7 +1,7 @@
 "use client";
 // Màn bắt đổi mật khẩu tạm: tài khoản do quản trị KhaiBáo AI tạo hộ (doanh nghiệp ký hợp đồng trực tiếp, quản trị viên đầu tiên).
 // Dùng chung cho ứng dụng khách và khu Quản trị: thay toàn bộ khung cho tới khi đổi xong – API khác trả PASSWORD_CHANGE_REQUIRED.
-import { Alert, BrandMark, Button, Card, CardContent, CardDescription, CardHeader, Field, Input, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, BrandMark, Button, Card, CardContent, CardDescription, CardHeader, Field, PasswordInput, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -61,13 +61,13 @@ export function ChangePasswordScreen() {
             <Stack gap="md">
               {change.isError && <Alert tone="danger" title={t.failed}>{errorText(change.error, locale)}</Alert>}
               <Field label={t.current} required {...(errors.current ? { error: errors.current } : {})}>
-                <Input type="password" autoComplete="current-password" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} autoFocus />
+                <PasswordInput autoComplete="current-password" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} autoFocus />
               </Field>
               <Field label={t.next} hint={t.nextHint} required {...(errors.next ? { error: errors.next } : {})}>
-                <Input type="password" autoComplete="new-password" value={form.next} onChange={(e) => setForm({ ...form, next: e.target.value })} />
+                <PasswordInput autoComplete="new-password" value={form.next} onChange={(e) => setForm({ ...form, next: e.target.value })} />
               </Field>
               <Field label={t.confirm} required {...(errors.confirm ? { error: errors.confirm } : {})}>
-                <Input type="password" autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
+                <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
               </Field>
               <Button type="submit" fullWidth loading={change.isPending}>{t.submit}</Button>
               <Button type="button" variant="secondary" fullWidth onClick={signOut}>{t.signOut}</Button>

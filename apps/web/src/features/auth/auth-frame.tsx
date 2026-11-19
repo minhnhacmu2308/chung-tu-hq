@@ -69,7 +69,7 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
             {BRAND}
           </div>
           <div className="flex items-center gap-3">
-            <LanguageSelect className="w-36" />
+            <LanguageSelect />
             <RobotAvatar state={robot} size={56} />
           </div>
         </div>

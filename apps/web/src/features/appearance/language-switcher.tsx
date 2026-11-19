@@ -1,7 +1,7 @@
 "use client";
 // Chọn ngôn ngữ giao diện (vi/en/zh): lưu vào cấu hình giao diện → cả cây React dựng lại theo ngôn ngữ mới.
 import {
-  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, Select,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, LocaleFlag, SegmentedControl,
   UI_LOCALES, useMessages, type UiLocale,
 } from "@kb/ui";
 import type { Appearance } from "@kb/ui/theme";
@@ -26,11 +26,12 @@ function useLocaleSetting() {
   return { locale: appearance.locale, setLocale };
 }
 
-/** Ô chọn ngôn ngữ gọn – dùng ở trang chưa đăng nhập (đăng nhập, đăng ký). */
+/** Chọn ngôn ngữ bằng lá cờ (tên ngôn ngữ là tên truy cập + tooltip) – dùng ở trang chưa đăng nhập (đăng nhập, đăng ký). */
 export function LanguageSelect({ className }: { className?: string }) {
   const t = useMessages(LANGUAGE_MESSAGES);
   const { locale, setLocale } = useLocaleSetting();
-  return <Select aria-label={t.language} options={OPTIONS} value={locale} onChange={(e) => setLocale(e.target.value)} className={className} />;
+  const options = UI_LOCALES.map((l) => ({ value: l, label: <LocaleFlag locale={l} label={LOCALE_NAMES[l]} className="h-4 w-6" /> }));
+  return <SegmentedControl label={t.language} hideLabel options={options} value={locale} onChange={setLocale} {...(className ? { className } : {})} />;
 }
 
 /** Mục con "Ngôn ngữ" trong menu người dùng. */
@@ -40,12 +41,14 @@ export function LanguageMenuSub() {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger icon={<Languages />}>
-        {t.language}: {LOCALE_NAMES[locale]}
+        <span className="flex items-center gap-2">{t.language}: <LocaleFlag locale={locale} label={LOCALE_NAMES[locale]} /></span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <DropdownMenuRadioGroup value={locale} onValueChange={setLocale}>
           {OPTIONS.map((o) => (
-            <DropdownMenuRadioItem key={o.value} value={o.value}>{o.label}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem key={o.value} value={o.value}>
+              <span className="flex items-center gap-2"><LocaleFlag locale={o.value} />{o.label}</span>
+            </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuSubContent>

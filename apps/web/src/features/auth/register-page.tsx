@@ -1,7 +1,7 @@
 "use client";
 // Đăng ký: (1) tài khoản → (2) doanh nghiệp theo MST → (3) hoàn tất.
 // MST mới → tạo doanh nghiệp, người đăng ký là Chủ sở hữu. MST đã có → gửi yêu cầu tham gia cho Chủ sở hữu duyệt.
-import { Alert, Button, Field, Input, Stack, Stepper, fill, useMessages } from "@kb/ui";
+import { Alert, Button, Field, Input, PasswordInput, Stack, Stepper, fill, useMessages } from "@kb/ui";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Search, Send } from "lucide-react";
 import Link from "next/link";
@@ -90,10 +90,10 @@ export function RegisterPage() {
             </Field>
             <div className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
               <Field label={t.password} required {...err(accountErrors.password)}>
-                <Input type="password" autoComplete="new-password" value={account.password} onChange={(e) => setField("password", e.target.value)} />
+                <PasswordInput autoComplete="new-password" value={account.password} onChange={(e) => setField("password", e.target.value)} />
               </Field>
               <Field label={t.confirm} required {...err(accountErrors.confirm)}>
-                <Input type="password" autoComplete="new-password" value={account.confirm} onChange={(e) => setField("confirm", e.target.value)} />
+                <PasswordInput autoComplete="new-password" value={account.confirm} onChange={(e) => setField("confirm", e.target.value)} />
               </Field>
             </div>
             <Button type="submit" fullWidth>{t.continue}</Button>

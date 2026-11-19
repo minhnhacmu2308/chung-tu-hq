@@ -41,12 +41,13 @@ describe("chọn ngôn ngữ ở trang đăng nhập", () => {
     expect(withLocale(base, "fr")).toBeNull();
   });
 
-  it("có ô chọn ngôn ngữ với 3 lựa chọn, đang chọn đúng ngôn ngữ hiện tại", () => {
+  it("chọn ngôn ngữ bằng 3 lá cờ (tên ngôn ngữ là tên truy cập), đang chọn đúng ngôn ngữ hiện tại", () => {
     const html = render("vi", LoginPage);
-    expect(html).toContain('aria-label="Ngôn ngữ"');
-    expect(html).toContain("Tiếng Việt");
-    expect(html).toContain("English");
-    expect(html).toContain("中文");
+    expect(html).toContain(">Ngôn ngữ</legend>");
+    expect(html).toContain('aria-label="Tiếng Việt"');
+    expect(html).toContain('aria-label="English"');
+    expect(html).toContain('aria-label="中文"');
+    expect(html).toMatch(/checked=""[^>]*value="vi"|value="vi"[^>]*checked=""/);
   });
 
   it("tiếng Việt giữ nguyên nhãn cũ", () => {
@@ -63,7 +64,7 @@ describe("chọn ngôn ngữ ở trang đăng nhập", () => {
     expect(html).toContain("Sign in");
     expect(html).toContain("Remember me");
     expect(html).toContain("Forgot password?");
-    expect(html).toContain('aria-label="Language"');
+    expect(html).toContain(">Language</legend>");
     expect(html).not.toContain("Ghi nhớ đăng nhập");
   });
 

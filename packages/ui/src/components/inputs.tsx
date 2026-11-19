@@ -1,5 +1,5 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Search } from "lucide-react";
 import { useMessages } from "../lib/i18n.js";
 import { matchesSearch } from "./combobox.js";
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
@@ -68,6 +68,42 @@ export function LookupInput({ className, onLookup, lookupLabel, lookupIcon, tool
           className="absolute inset-y-1 right-1 grid w-8 place-items-center rounded-sm text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-50"
         >
           {lookupIcon ?? <Search className="h-4 w-4" aria-hidden />}
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+const PASSWORD_MESSAGES = {
+  vi: { show: "Hiện mật khẩu", hide: "Ẩn mật khẩu" },
+  en: { show: "Show password", hide: "Hide password" },
+  zh: { show: "显示密码", hide: "隐藏密码" },
+};
+
+export type PasswordInputProps = Omit<ComponentProps<"input">, "type" | "className"> & {
+  /** Bề rộng/bố cục của cả ô (nút mắt nằm trong viền). */
+  className?: string;
+  labels?: Partial<Record<keyof (typeof PASSWORD_MESSAGES)["vi"], string>>;
+};
+
+/** Ô mật khẩu kèm nút mắt (bên phải, trong viền) để hiện/ẩn chữ đã gõ. Nút là toggle (`aria-pressed`), vẫn nằm trong vòng Tab cho người dùng bàn phím. */
+export function PasswordInput({ className, labels, disabled, ...props }: PasswordInputProps) {
+  const t = useMessages(PASSWORD_MESSAGES, labels);
+  const [visible, setVisible] = useState(false);
+  const label = visible ? t.hide : t.show;
+  return (
+    <div className={cn("relative min-w-0", className)}>
+      <Input type={visible ? "text" : "password"} className="pr-10" disabled={disabled} {...props} />
+      <Tooltip content={label}>
+        <button
+          type="button"
+          aria-label={t.show}
+          aria-pressed={visible}
+          disabled={disabled}
+          onClick={() => setVisible((v) => !v)}
+          className="absolute inset-y-1 right-1 grid w-8 place-items-center rounded-sm text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-50"
+        >
+          {visible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
         </button>
       </Tooltip>
     </div>

@@ -3,7 +3,7 @@
 // gửi email thử tới chính mình. Quyền Nền tảng.
 import { UpdateMailSettingsInputSchema, type MailSettings } from "@kb/contracts";
 import {
-  Alert, Button, Card, CardContent, CardFooter, Field, fill, Grid, Input, PageHeader, PageLoading, SegmentedControl, Stack, StatusBadge, useMessages,
+  Alert, Button, Card, CardContent, CardFooter, Field, fill, Grid, Input, PageHeader, PasswordInput, PageLoading, SegmentedControl, Stack, StatusBadge, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRound, MailCheck, Save } from "lucide-react";
@@ -85,7 +85,7 @@ export function MailSettingsPage() {
                   <Input value={form.username} onChange={(e) => set("username", e.target.value)} autoComplete="off" />
                 </Field>
                 <Field label={t.password} hint={t.passwordHint}>
-                  <Input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} autoComplete="new-password" placeholder={s.hasPassword ? t.passwordKeep : ""} />
+                  <PasswordInput value={form.password} onChange={(e) => set("password", e.target.value)} autoComplete="new-password" placeholder={s.hasPassword ? t.passwordKeep : ""} />
                 </Field>
                 <Field label={t.fromName} required>
                   <Input value={form.fromName} onChange={(e) => set("fromName", e.target.value)} />

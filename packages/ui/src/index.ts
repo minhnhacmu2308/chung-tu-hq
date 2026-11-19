@@ -9,7 +9,7 @@ export { NoticeChip, type NoticeChipProps, type NoticeItem, type NoticeTone } fr
 export { PaperStack, PaperSheet, PaperField, PaperColumns, PaperLabel, type PaperSheetProps, type PaperFieldProps, type PaperFieldState, type PaperFieldEdit } from "./components/paper.js";
 export { FloatingActionBar, type FloatingActionBarProps } from "./components/floating-action-bar.js";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.js";
-export { Input, LookupInput, SearchInput, Textarea, Select, SELECT_SEARCH_FROM, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps, type SearchInputProps } from "./components/inputs.js";
+export { Input, LookupInput, PasswordInput, SearchInput, Textarea, Select, SELECT_SEARCH_FROM, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps, type PasswordInputProps, type SearchInputProps } from "./components/inputs.js";
 export { FeedGroup, FeedItem, type FeedGroupProps, type FeedItemProps } from "./components/feed.js";
 export { RadioGroup, type RadioGroupProps, type RadioOption } from "./components/radio-group.js";
 export {
@@ -49,6 +49,7 @@ export {
   type StepperProps, type StepperStep, type StepProgressProps, type WorkflowDiagramProps, type FlowNode, type FlowEdge, type FlowNodeKind, type FlowNodeStatus,
 } from "./components/workflow.js";
 export { UiLocaleProvider, useUiLocale, useMessages, defineMessages, pickMessages, fill, intlLocale, UI_LOCALES, type UiLocale, type Messages } from "./lib/i18n.js";
+export { LocaleFlag, type LocaleFlagProps } from "./components/locale-flag.js";
 export {
   DataTable, DataTableFilterSelect, createDataTableColumnHelper, dataTableFeatures,
   type DataTableProps, type DataTableFilterSelectProps, type DataTableColumn, type DataTableColumnMeta, type DataTablePagination, type DataTableFeatures,

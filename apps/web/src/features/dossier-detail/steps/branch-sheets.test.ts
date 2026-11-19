@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { recallProgress, anyInProgress, submissionRefetchMs, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
+import { recallProgress, anyInProgress, canReopenRecalled, submissionRefetchMs, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -209,5 +209,18 @@ describe("submissionRefetchMs – nhịp làm mới màn Truyền", () => {
     const recalling = submissionOf([branch(1, 2, "RECALLED"), branch(2, 2, "PRE_DECLARED", { inProgress: true, sending: true })]);
     expect(submissionRefetchMs(recalling)).toBe(3000);
     expect(submissionRefetchMs(submissionOf([branch(1, 1, "CLEARED")]))).toBe(false);
+  });
+});
+
+describe("canReopenRecalled – mở lại sau gọi về thành công (IDB/EDB/IDD/EDD)", () => {
+  it("có tờ RECALLED / AMEND_RECALLED, không tờ nào đang gửi → mở lại được", () => {
+    expect(canReopenRecalled(submissionOf([branch(1, 1, "RECALLED")]))).toBe(true);
+    expect(canReopenRecalled(submissionOf([branch(1, 2, "DECLARED"), branch(2, 2, "AMEND_RECALLED")]))).toBe(true);
+  });
+  it("chưa gọi về, tờ khai không SUBMITTED, hoặc đang gửi lại nội dung → không", () => {
+    expect(canReopenRecalled(submissionOf([branch(1, 1, "PRE_DECLARED")]))).toBe(false);
+    expect(canReopenRecalled({ ...submissionOf([branch(1, 1, "RECALLED")]), declarationStatus: "DRAFT" })).toBe(false);
+    const sending = branch(1, 1, "RECALLED", { pipeline: pipelineFor("RECALLED").map((r) => (r.op === "IDA" ? { ...r, status: "SENDING" as const } : r)) });
+    expect(canReopenRecalled(submissionOf([sending]))).toBe(false);
   });
 });

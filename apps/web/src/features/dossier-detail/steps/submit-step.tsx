@@ -9,8 +9,9 @@ import {
 import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, type CustomsRejection, isContentOperation, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown, ArrowRight, Ban, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
+  ArrowDown, ArrowRight, Ban, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, Printer, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
@@ -33,6 +34,7 @@ import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
 import type { StepProps } from "./types";
 import { AMA_STATUS } from "../../post-amendment/ama-context";
+import { declarationPrintHref } from "../../declaration-print/declaration-print-page";
 import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
@@ -49,7 +51,7 @@ import { HYS_MESSAGES } from "./hys/hys.messages";
 import { billingErrorOf, billingBlockFor, BillingBlockAlert, ContractGraceAlert, CreditsUsageLine, type BillingBlock } from "./submit-billing";
 import { CancelDeclarationDialog, CancellationLine, type CancelInput, SheetStatusBadges, useCancelReasonText } from "./sheet-lifecycle";
 import { SHEET_LIFECYCLE_MESSAGES } from "./sheet-lifecycle.messages";
-import { canCancelSheet, canReopenUnnumbered, canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
+import { canCancelSheet, canReopenRecalled, canReopenUnnumbered, canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -777,7 +779,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     ) : null;
 
   const declareAllState = canDeclareAll(sheets);
-  const reopenAvailable = canReopen && canReopenUnnumbered(s);
+  const reopenRecalled = canReopenRecalled(s);
+  const reopenAvailable = canReopen && (canReopenUnnumbered(s) || reopenRecalled);
   const cancelSheet = cancelFor ? sheets.find((b) => b.no === cancelFor) : undefined;
   const cancelButton = (b: BranchSubmission) =>
     canConfirmCancel && canCancelSheet(b) ? (
@@ -857,7 +860,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         loading={reopenUnnumbered.isPending}
         onConfirm={() => reopenUnnumbered.mutate()}
       >
-        {lc.reopenBody}
+        {reopenRecalled ? lc.reopenRecalledBody : lc.reopenBody}
       </ConfirmDialog>
       <ConfirmDeclareAllDialog
         open={declareAllOpen}
@@ -945,6 +948,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             onQuery={() => perform.mutate({ op: b.queryOp, branch: b.no })}
             onViewErrors={() => goTo("review")}
             onPost={() => goTo("post", { branch: b.no })}
+            printHref={declarationPrintHref(dossier.id, b.no)}
             cancelAction={cancelButton(b)}
             kvgs={kvgsCardFor(b)}
           />
@@ -997,6 +1001,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {sheets[0] && cancelButton(sheets[0])}
+              {hasNumber && (
+                <Button asChild size="sm" variant="secondary">
+                  <Link href={declarationPrintHref(dossier.id)}>
+                    <Printer aria-hidden="true" className="h-4 w-4" />
+                    {t.printDecl}
+                  </Link>
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
@@ -1044,7 +1056,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
  * nghiệp vụ theo giai đoạn và nhật ký của tờ; tờ đã thông quan có nút sang bước 7 (AMA của tờ).
  */
 function SheetCard({
-  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost, cancelAction, kvgs,
+  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost, printHref, cancelAction, kvgs,
 }: {
   b: BranchSubmission;
   of: number;
@@ -1059,6 +1071,8 @@ function SheetCard({
   onQuery: () => void;
   onViewErrors: () => void;
   onPost: () => void;
+  /** Trang in tờ khai của tờ (nút "In tờ khai" khi tờ đã có số). */
+  printHref: string;
   /** Nút "Xác nhận tờ khai đã hủy" (null khi không được phép). */
   cancelAction: ReactNode;
   /** Thẻ Qua khu vực giám sát của tờ (ngoài khối nghiệp vụ thu gọn – lối tắt #kvgs-<tờ> cuộn tới được). */
@@ -1108,6 +1122,14 @@ function SheetCard({
           {postStepVisible(b.stage) && (
             <Button size="sm" variant="secondary" leftIcon={<FilePen className="h-4 w-4" />} onClick={onPost}>
               {sh.postAmend}
+            </Button>
+          )}
+          {b.declarationNo && (
+            <Button asChild size="sm" variant="secondary">
+              <Link href={printHref} aria-label={fill(sh.printAria, { no: b.no })}>
+                <Printer aria-hidden="true" className="h-4 w-4" />
+                {t.printDecl}
+              </Link>
             </Button>
           )}
           <Button

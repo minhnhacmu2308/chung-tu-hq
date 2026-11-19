@@ -92,12 +92,14 @@ export const editSheetsOf = (db: MockDb, dossierId: string): EditSheet[] =>
   });
 
 /**
- * Hồ sơ đã truyền có mở lại để sửa được không (như reopenDeclaration ở backend, chưa tờ nào có số):
+ * Hồ sơ đã truyền có mở lại để sửa được không (như reopenDeclaration ở backend, chưa tờ nào có số hoặc có tờ đã gọi về):
  * LOCKED = có tờ đã có số (hoặc không có tờ nào); SENDING = còn nghiệp vụ nội dung đang chờ phản hồi (mock: flow.pending); FREE = mở lại được.
  */
 export function reopenSubmittedState(db: MockDb, dossierId: string): "LOCKED" | "SENDING" | "FREE" {
   const sheets = editSheetsOf(db, dossierId);
-  if (!sheets.length || sheets.some((s) => s.declarationNo || s.stage !== "NOT_SENT")) return "LOCKED";
+  // Đã gọi về thành công (IDB/EDB → RECALLED, IDD/EDD → AMEND_RECALLED) ở ít nhất một tờ → mở lại được dù đã có số.
+  const recalled = sheets.some((s) => s.stage === "RECALLED" || s.stage === "AMEND_RECALLED");
+  if (!sheets.length || (!recalled && sheets.some((s) => s.declarationNo || s.stage !== "NOT_SENT"))) return "LOCKED";
   const sending = sheets.some((s) => { const p = flowOf(db, dossierId, s.no).pending; return !!p && isContentOperation(p.op); });
   return sending ? "SENDING" : "FREE";
 }

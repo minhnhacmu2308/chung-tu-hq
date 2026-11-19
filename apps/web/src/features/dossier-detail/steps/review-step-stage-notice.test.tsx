@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Bước Review: thông báo giai đoạn sửa đặt trên bản in (chuyển từ form Phụ lục II cũ) – chưa khai: số chỉ tiêu sửa được; đã duyệt: chỉ đọc.
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb } from "@/mocks/db";
 import { renderWithProviders } from "@/test/dom";
@@ -13,7 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Bản in 120 dòng vẽ chậm khi cả bộ test chạy song song → chờ rộng tay.
-const T = { timeout: 45_000 };
+const T = { timeout: 150_000 };
 const dossier = () => getDb().dossiers.find((d) => d.id === "dos_028")!;
 const setStatus = (status: "DRAFT" | "APPROVED") => {
   getDb().declarations.find((x) => x.dossierId === "dos_028")!.status = status;
@@ -24,25 +25,30 @@ beforeEach(() => {
 });
 
 describe("ReviewStep – thông báo giai đoạn sửa trên bản in", () => {
-  it("bản nháp (chưa khai) → 'Tờ khai chưa khai báo' kèm số chỉ tiêu sửa được", async () => {
+  it("bản nháp (chưa khai) → không có khung thông báo; nút ? cạnh tiêu đề mở hướng dẫn kèm số chỉ tiêu sửa được", async () => {
     setStatus("DRAFT");
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    expect(await screen.findByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu", {}, T)).toBeTruthy();
-    expect(screen.getByText(/^Sửa được \d[\d.]* chỉ tiêu người khai nhập/)).toBeTruthy();
+    const help = await screen.findByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" }, T);
+    expect(screen.queryByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeNull();
     expect(screen.queryByText("Tờ khai chỉ đọc")).toBeNull();
-  }, 90_000);
+    await userEvent.click(help);
+    const text = document.querySelector("[role=dialog][aria-label=\"Hướng dẫn sửa tờ khai\"]")?.textContent ?? "";
+    expect(text).toContain("Tờ khai chưa khai báo – nhập đủ chỉ tiêu");
+    expect(text).toMatch(/Sửa được \d[\d.]* chỉ tiêu người khai nhập/);
+  }, 240_000);
 
   it("đã phê duyệt → chỉ đọc, chỉ cách mở lại / gọi về", async () => {
     setStatus("APPROVED");
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText("Tờ khai chỉ đọc", {}, T)).toBeTruthy();
     expect(screen.getByText(/^Tờ khai đã phê duyệt \/ đã truyền\. Mở lại tờ khai/)).toBeTruthy();
-    expect(screen.queryByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeNull();
-  }, 90_000);
+    expect(screen.queryByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" })).toBeNull();
+  }, 240_000);
 
   it("tiếng Anh", async () => {
     setStatus("DRAFT");
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />, "en");
-    expect(await screen.findByText("Declaration not filed yet – fill in all fields", {}, T)).toBeTruthy();
-  }, 90_000);
+    await userEvent.click(await screen.findByLabelText("How to edit the declaration", { selector: "button" }, T));
+    expect(document.querySelector("[role=dialog]")?.textContent).toContain("Declaration not filed yet – fill in all fields");
+  }, 240_000);
 });

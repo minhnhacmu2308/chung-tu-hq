@@ -233,6 +233,25 @@ describe("Danh sách hồ sơ – tiến độ + tab việc cần làm", () => {
   }, 30_000);
 });
 
+describe("Danh sách hồ sơ – In tờ khai", () => {
+  it("hồ sơ đã dựng tờ khai (Review, chưa truyền) có 'In tờ khai' mở trang in; hồ sơ chưa tới Review thì không", async () => {
+    const db = getDb();
+    const sent = (d: (typeof db.dossiers)[number]) => d.status === "SUBMITTED" || d.status === "CLEARED" || !!d.declarationNo || !!db.customsFlows[d.id];
+    const draft = db.dossiers.find((d) => d.step === "review" && !sent(d))!;
+    const early = db.dossiers.find((d) => (d.step === "upload" || d.step === "ocr") && !sent(d))!;
+    renderWithProviders(<DossierListPage />);
+    const table = await screen.findByRole("table", { name: "Hồ sơ khai báo" }, T);
+    await userEvent.type(screen.getByRole("searchbox"), draft.code);
+    await openMenu(table, draft.code, /^In tờ khai/, true);
+    expect(push).toHaveBeenCalledWith(`/dossiers/${draft.id}/declaration/print`);
+
+    await userEvent.clear(screen.getByRole("searchbox"));
+    await userEvent.type(screen.getByRole("searchbox"), early.code);
+    await openMenu(table, early.code, /^Mở hồ sơ/);
+    expect(screen.queryByRole("menuitem", { name: /^In tờ khai/ })).toBeNull();
+  }, 40_000);
+});
+
 describe("Danh sách hồ sơ – tab trống", () => {
   it("tab việc cần làm không còn hồ sơ → câu trống của đúng tab (không phải câu của ô tìm kiếm)", async () => {
     const db = getDb();

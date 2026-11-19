@@ -329,7 +329,6 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
         onNextAttention={nextAttention}
         {...(quickAvailable ? { quickEdit: { on: quick, onChange: toggleQuick, locked: drafts > 0 } } : {})}
       />
-      {quick && <Alert tone="info">{t.quickEditDesc}</Alert>}
       {model.directives > 0 && (
         <Alert
           tone="warning"
@@ -341,7 +340,8 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
           }
         />
       )}
-      <SharedFieldsNote of={view.of} />
+      {/* Hướng dẫn sửa chỉ tiêu chung – trang in chỉ đọc (canEdit=false) không hiện. */}
+      {canEdit && <SharedFieldsNote of={view.of} />}
       {lineBlock && (
         <Alert tone="info">{lineBlock.reasonCode === "LINE_SHEET_CLOSED" ? fill(t.sheetClosed, { sheet: view.no }) : fill(t.sheetNotRecalledNote, { sheet: view.no })}</Alert>
       )}

@@ -22,7 +22,10 @@ test("Review: sửa chỉ tiêu trên bản in tờ khai (chặn chỉ tiêu tí
 
   // Chỉ tiêu là đầu vào tính thuế / do hệ thống cấp chỉ đọc trong panel; backend cũng chặn.
   await page.goto(full(id));
-  await expect(page.getByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeVisible(); // thông báo giai đoạn trên bản in
+  // Thông báo giai đoạn nằm trong HelpPopover (nút ? cạnh tiêu đề), không còn khung Alert.
+  await page.getByRole("button", { name: "Hướng dẫn sửa tờ khai" }).click();
+  await expect(page.getByRole("dialog", { name: "Hướng dẫn sửa tờ khai" }).getByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeVisible();
+  await page.keyboard.press("Escape");
   let panel = await openCell(page, "TK_ICB");
   // Panel chỉ đọc: không có ô nhập nào.
   await expect(panel.getByRole("heading", { name: /^1\.4\b/ })).toBeVisible();

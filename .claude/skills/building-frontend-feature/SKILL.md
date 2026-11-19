@@ -37,6 +37,7 @@ apps/web/src/
 | Cần | Dùng | Không làm |
 |---|---|---|
 | Cảnh báo / lưu ý trên dòng bảng (HS, thuế, chính sách…) | `NoticeChip` (nhãn ngắn theo `code`, câu đầy đủ trong thẻ); lưu ý lặp trên nhiều dòng → gom một lần trên đầu bảng kèm "Áp dụng cho dòng …" | Câu cảnh báo dài `line-clamp` trong ô; tooltip `title` chứa cả đoạn văn; mọi cảnh báo cùng một màu vàng |
+| Hướng dẫn cách dùng, phạm vi sửa, phím tắt (lần nào vào cũng giống nhau) | `HelpPopover` (nút `?` cạnh tiêu đề / control) – phím tắt: `label="Phím tắt"` + icon `Keyboard` + `ShortcutList`. Mỗi vùng tối đa 1 `Alert`, chỉ cho việc cần làm / trạng thái bất thường | `Alert tone="info"` hướng dẫn hiện mãi; nhiều `Alert` xếp chồng; danh sách phím trong `Tooltip` |
 | Danh sách mã Hải quan (chi cục A038, loại hình TYPE_CODE, tiền tệ CURRENCY, phương thức thanh toán PAYMENT…) | `useCodeList("<ID>")` từ danh mục `@kb/contracts` code-lists (ô mã trên tờ khai: `CodeInput`) | Mảng `{ value, label }` mã viết cứng trong feature / `*.vi.ts` |
 | Thanh nổi cho việc đang chờ trên cả trang (ô chưa lưu, "Lưu N thay đổi") | `FloatingActionBar` (`label`, `summary`, nút `size="sm"`: Hủy `secondary` + nút chính) | Tự dựng `div fixed bottom-…`; `Alert` dính đầu trang chứa nút lưu |
 | Thẻ chỉ số / KPI đầu trang | `StatCard` (số `number` tự chạy đếm) trong `Grid cols={{ base: 2, xl: 4 }} stagger` | Tự ghép `Card` + `CardTitle` thành KPI |

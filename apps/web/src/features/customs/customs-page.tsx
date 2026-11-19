@@ -13,6 +13,7 @@ import { CUSTOMS_OPERATIONS } from "@kb/contracts";
 import { customsKeys, listCustomsDeclarations, type CustomsRow } from "@/api/customs";
 import { LoadError } from "@/components/common/load-error";
 import { formatDateTime, formatRelative, formatVnd } from "@/lib/format";
+import { declarationPrintHref } from "../declaration-print/declaration-print-page";
 import { CUSTOMS_PAGE_MESSAGES } from "./customs.messages";
 
 // Trạng thái tờ khai → mã StatusBadge của @kb/ui (nguồn duy nhất của nhãn + màu).
@@ -198,6 +199,8 @@ export function CustomsPage() {
               actions={[
                 { id: "submit", label: t.openSubmit, icon: <ArrowUpRight />, primary: true, onSelect: () => router.push(submitHref(r)) },
                 { id: "dossier", label: t.openDossier, icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.dossierId}`) },
+                // Tờ chưa có số (đã duyệt, chờ truyền) in ra bản nháp – chữ chìm theo giai đoạn.
+                { id: "print", label: t.printDecl, icon: <Printer />, quick: false, onSelect: () => router.push(declarationPrintHref(r.dossierId, r.branch)) },
                 ...(r.state === "CLEARED" ? [{ id: "kvgs", label: t.openKvgs, icon: <ScanBarcode />, onSelect: () => router.push(kvgsHref(r)) }] : []),
                 ...(r.kvgsReady ? [{ id: "kvgsPrint", label: t.printKvgs, icon: <Printer />, onSelect: () => router.push(kvgsPrintHref(r)) }] : []),
               ]}

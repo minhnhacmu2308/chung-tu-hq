@@ -4,7 +4,7 @@
 // Sau thông quan: tờ khai gốc chỉ đọc – sửa bằng bản khai bổ sung AMA ở bước 7 "Sửa sau thông quan".
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
-  Dialog, DialogContent, DialogFooter, EmptyState, fill, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages, useUiLocale,
+  Dialog, DialogContent, DialogFooter, EmptyState, fill, HelpPopover, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { branchCount, canEditDeclaration, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,7 +25,8 @@ import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { IncotermChangedNote } from "./incoterm-changed-note";
 import { REVIEW_MESSAGES } from "./review-step.messages";
-import { anyInProgress, canReopenUnnumbered, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
+import { SHEET_LIFECYCLE_MESSAGES } from "./sheet-lifecycle.messages";
+import { anyInProgress, canReopenRecalled, canReopenUnnumbered, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
 import { editableKeys } from "../../declaration-form/dossier-adapter";
 import { DossierOperationsTab } from "../../declaration-form/dossier-tabs";
@@ -83,20 +84,27 @@ function AttentionBadge({ decl, items, branches, submission, mode, lineModes, ca
 }
 
 /**
- * Thông báo giai đoạn sửa tờ khai, đặt trên bản in: chưa khai báo → số chỉ tiêu sửa được; đã phân luồng → khai sửa đổi bổ sung
+ * Chưa khai báo (sửa đủ chỉ tiêu): hướng dẫn tĩnh, lần nào vào cũng giống nhau → nút ? cạnh tiêu đề tờ khai, không chiếm khung Alert
+ * (luật "Thông báo trong trang" – .claude/rules/dung-component-chung.md).
+ */
+function StageHelp({ decl }: { decl: Declaration }) {
+  const t = useMessages(REVIEW_MESSAGES);
+  const editableCount = useMemo(() => new Set(editableKeys(decl.kind, decl.fields, "FULL").values()).size, [decl.kind, decl.fields]);
+  return (
+    <HelpPopover label={t.stageHelpLabel} title={t.stageFullTitle}>
+      {fill(t.stageFullBody, { n: formatNumber(editableCount) })}
+    </HelpPopover>
+  );
+}
+
+/**
+ * Thông báo giai đoạn sửa tờ khai, đặt trên bản in (chưa khai báo → không có khung, xem StageHelp); đã phân luồng → khai sửa đổi bổ sung
  * (khai tạm sửa đổi IDA01/EDA01); chỉ đọc → không có quyền / đã thông quan (sửa bằng AMA ở bước 7) / đã duyệt – đã truyền.
  * Lô nhiều tờ còn tờ chưa gọi về: khung "Thông tin chung: tờ … chưa gọi về" ở đầu bước đã nói rõ → không nhắc lại.
  */
 function StageNotice({ decl, mode, canEdit, cleared }: { decl: Declaration; mode: DeclarationEditMode; canEdit: boolean; cleared: boolean }) {
   const t = useMessages(REVIEW_MESSAGES);
-  const editableCount = useMemo(() => (mode === "FULL" ? new Set(editableKeys(decl.kind, decl.fields, mode).values()).size : 0), [decl.kind, decl.fields, mode]);
-  if (mode === "FULL") {
-    return (
-      <Alert tone="info" title={t.stageFullTitle}>
-        {fill(t.stageFullBody, { n: formatNumber(editableCount) })}
-      </Alert>
-    );
-  }
+  if (mode === "FULL") return null;
   if (mode === "AMEND") {
     return (
       <Alert tone="warning" title={t.stageAmendTitle}>
@@ -116,6 +124,7 @@ type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
   const t = useMessages(REVIEW_MESSAGES);
+  const lc = useMessages(SHEET_LIFECYCLE_MESSAGES);
   const locale = useUiLocale();
   const qc = useQueryClient();
   const router = useRouter();
@@ -299,6 +308,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <CardTitle className="flex flex-wrap items-center gap-2">
               {kindLabel}
               <span className="font-mono text-sm font-normal text-fg-muted">{dossier.typeCode}</span>
+              {session.isSuccess && subQ.isSuccess && canEdit && editMode === "FULL" && !(isDraft && scope.lockedSheets.length > 0) && <StageHelp decl={decl} />}
             </CardTitle>
             <CardDescription>
               {dossier.partner} · {formatMoney(decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0", dossier.currency)} · {fill(t.lines, { n: items.length })}
@@ -452,7 +462,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           </Button>
         ) : (
           <>
-            {(decl.status === "APPROVED" || (decl.status === "SUBMITTED" && subQ.data && canReopenUnnumbered(subQ.data))) && canEdit && (
+            {(decl.status === "APPROVED" || (decl.status === "SUBMITTED" && subQ.data && (canReopenUnnumbered(subQ.data) || canReopenRecalled(subQ.data)))) && canEdit && (
               <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setReopenOpen(true)}>
                 {t.reopenEdit}
               </Button>
@@ -465,7 +475,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
         <DialogContent title={t.reopenDialogTitle} icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
-          <p className="text-sm text-fg-muted">{t.reopenDialogBody}</p>
+          <p className="text-sm text-fg-muted">{decl.status === "SUBMITTED" && subQ.data && canReopenRecalled(subQ.data) ? lc.reopenRecalledBody : t.reopenDialogBody}</p>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setReopenOpen(false)}>
               {t.cancel}

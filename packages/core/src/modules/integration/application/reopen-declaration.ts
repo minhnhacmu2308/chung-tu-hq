@@ -1,8 +1,9 @@
-// Mở lại tờ khai để sửa: hồ sơ APPROVED chưa truyền, hoặc đã truyền mà CHƯA tờ nào có số tờ khai (gửi lỗi / chưa có phản hồi) và không còn nghiệp vụ nội dung đang gửi.
+// Mở lại tờ khai để sửa: hồ sơ APPROVED chưa truyền, hoặc đã truyền mà CHƯA tờ nào có số tờ khai (gửi lỗi / chưa có phản hồi) hoặc có tờ đã gọi về
+// thành công (IDB/EDB/IDD/EDD), và không còn nghiệp vụ nội dung đang gửi.
 // Lô nhiều tờ: chỉ tiêu chung dùng chung → mở lại là mở CẢ BỘ (một tờ khai DRAFT); tờ đã có số giữ giai đoạn, sau duyệt lại truyền lại theo giai đoạn
 // từng tờ (submitDeclaration). Lô nhiều tờ mở lại được khi chỉ gọi về một phần (bỏ R3): tờ chưa gọi về được bảo vệ bởi guard nội dung đã gửi
 // (SENT_SHEETS_CHANGED lúc duyệt / truyền – spec §2.5).
-import { EDITING_STAGES, isContentOperation, type CustomsOperation } from "@kb/contracts";
+import { EDITING_STAGES, isContentOperation, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
@@ -12,6 +13,9 @@ import type { CustomsDeps } from "./customs-ports.js";
 import { HysOutboxPayloadSchema } from "./process-hys.js";
 import { ContListPayload, KvgsPayload } from "./process-kvgs.js";
 import { patchTarget } from "./poll-kvgs.js";
+
+/** Giai đoạn sau khi gọi về thành công: IDB/EDB → RECALLED, IDD/EDD → AMEND_RECALLED. */
+const RECALLED_STAGES: ReadonlySet<CustomsStage> = new Set(["RECALLED", "AMEND_RECALLED"]);
 
 export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -23,13 +27,15 @@ export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   const noneNumbered = results.length > 0 && results.every((r) => !r.declarationNo && stageOf(r) === "NOT_SENT");
   const sendFailed = noneNumbered && results.some((r) => r.state === "SEND_FAILED");
   const submittedUnnumbered = dossier.status === "SUBMITTED" && noneNumbered;
-  if (submittedUnnumbered) {
+  // Gọi về thành công (IDB/EDB → RECALLED, IDD/EDD → AMEND_RECALLED) ở ít nhất một tờ mà tờ khai vẫn SUBMITTED (tự mở lại bị bỏ qua / đã duyệt lại, truyền lại rồi) → mở lại được.
+  const submittedRecalled = dossier.status === "SUBMITTED" && results.some((r) => RECALLED_STAGES.has(stageOf(r)));
+  if (submittedUnnumbered || submittedRecalled) {
     const outbox = await deps.uow.asOrg(ctx, (r) => r.outbox.listForDossier(ctx.orgId, dossierId));
     if (outbox.some((o) => o.status === "PENDING" && isContentOperation(o.operation as CustomsOperation))) return err(reasonError("INVALID_STATE", "DECLARATION_SENDING"));
   }
-  // Đang ở giai đoạn sửa (đã gọi về / mở sửa sau thông quan – ở bất kỳ tờ nào) mà tờ khai đã duyệt lại: mở lại để sửa tiếp, giữ giai đoạn.
-  const editing = results.find((r) => EDITING_STAGES.has(stageOf(r)));
-  if (dossier.status === "APPROVED" && editing) {
+  // Đang ở giai đoạn sửa (đã gọi về / mở sửa sau thông quan – ở bất kỳ tờ nào) mà tờ khai đã duyệt lại hoặc đã truyền sau gọi về: mở lại để sửa tiếp, giữ giai đoạn.
+  const editing = results.find((r) => RECALLED_STAGES.has(stageOf(r))) ?? results.find((r) => EDITING_STAGES.has(stageOf(r)));
+  if ((dossier.status === "APPROVED" || submittedRecalled) && editing) {
     await deps.declarations.markDraft(ctx, dossierId);
     await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: dossierId, targetLabel: dossier.code, detail: { stage: stageOf(editing), ...(results.length > 1 ? { branch: editing.branch } : {}) } });
     return ok(undefined);

@@ -41,6 +41,7 @@ paths:
 | Ô nhập trong panel sửa một chỉ tiêu | `FormField fill` – mọi ô (chữ, mã, ngày) full chiều rộng panel | Ô mã `w-32` ngắn hơn ô chữ cùng panel |
 | Chữ gợi ý trong ô nhập | `placeholder` lấy từ `*.messages.ts` ("Nhập mã", "Nhập <tên chỉ tiêu>", "Nhập số"; ô hẹp "Nhập…") | Ô trống trơn không gợi ý; placeholder viết cứng |
 | Đồng ý / Bỏ qua lặp trên mỗi dòng danh sách | Nút icon tròn `Button size="icon" variant="ghost"` + `Tooltip` + `aria-label` (✓ `text-success`, ✕ `text-fg-muted`) | Hai nút chữ `size="sm"` trên từng dòng – thô, nặng mắt |
+| Thông báo trong trang (khung `Alert` trên màn) | **Mỗi vùng tối đa 1 `Alert`**, chọn mức nặng nhất (lỗi → cảnh báo → thông tin). `Alert` chỉ cho **việc cần làm** hoặc **trạng thái bất thường** (bị từ chối, chỉ đọc, khai sửa đổi). **Hướng dẫn tĩnh** (cách dùng, phạm vi sửa, lần nào vào cũng giống nhau) → `HelpPopover` (nút `?`) sát thứ nó giải thích: cạnh tiêu đề, cạnh công tắc. **Phím tắt** → `HelpPopover label="Phím tắt"` + icon `Keyboard` + `ShortcutList`, chỉ hiện khi tính năng đang bật; muốn người dùng thấy ngay thì tự mở **một lần** (nhớ bằng `localStorage`). Không nhắc lại điều `Badge`/`StatusBadge` đã nói | 2–3 khung `Alert` xếp chồng trên cùng vùng; `Alert tone="info"` chứa đoạn hướng dẫn hiện mãi; nhét danh sách phím tắt vào `Tooltip` (chỉ hiện khi rê chuột, không dùng được trên cảm ứng) |
 | Đang tải / lỗi / trống | `PageLoading`, `Skeleton*`, `LoadError`, `EmptyState` | `Skeleton className="h-80"`, để trống |
 
 ## 3. Máy kiểm tra (`pnpm lint`)
@@ -51,11 +52,12 @@ Ngoại lệ hiếm (vd lưới sửa trực tiếp từng ô ở `ocr/items-tab
 
 TypeScript chặn: `DialogContent` thiếu `icon` (prop bắt buộc) → không biên dịch được.
 
-Máy chưa bắt được (review phải soát): popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có; `Input` + nút kính lúp rời (→ `LookupInput`); ô nhập thiếu `placeholder`; ô trong panel không full chiều rộng; nút chữ Đồng ý/Bỏ qua lặp trên từng dòng.
+Máy chưa bắt được (review phải soát): popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có; `Input` + nút kính lúp rời (→ `LookupInput`); ô nhập thiếu `placeholder`; ô trong panel không full chiều rộng; nút chữ Đồng ý/Bỏ qua lặp trên từng dòng; nhiều `Alert` xếp chồng trong một vùng / `Alert` chỉ chứa hướng dẫn tĩnh.
 
 ## 4. Trước khi báo xong
 
 - [ ] `pnpm lint` xanh, không thêm `kb-allow-raw` mới mà không có lý do.
 - [ ] Mọi popup mới: có icon, còn nút chuyển panel, nút hành động nằm trong `DialogFooter`.
 - [ ] Mọi ô nhập mới có `placeholder` (từ messages); ô có tra cứu dùng `LookupInput`.
+- [ ] Mỗi vùng tối đa 1 `Alert`; hướng dẫn tĩnh, phím tắt nằm trong `HelpPopover` cạnh thứ nó giải thích.
 - [ ] Mở trình duyệt so popup / bảng mới với một màn tương tự đã có – phải cùng dáng.

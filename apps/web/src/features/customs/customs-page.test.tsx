@@ -95,6 +95,13 @@ describe("Khai báo Hải quan – lối tắt qua khu vực giám sát", () => 
     expect(screen.queryByRole("menuitem", { name: /In bản kê mã vạch/ })).toBeNull();
   }, 20_000);
 
+  it("mọi tờ có 'In tờ khai' mở trang in đúng tờ (lô nhiều tờ: ?to=k)", async () => {
+    const { code, row } = await rowOf("dos_019");
+    await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code}` }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^In tờ khai/ }, T));
+    expect(push).toHaveBeenCalledWith("/dossiers/dos_019/declaration/print");
+  }, 20_000);
+
   it("tờ đã có bảng kê KVGS thành công có 'In bản kê mã vạch' mở trang in", async () => {
     const db = getDb();
     db.kvgs.fetches.push({

@@ -125,7 +125,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 |---|---|
 | Đăng nhập / Đăng ký | Email + mật khẩu; đăng ký doanh nghiệp theo MST; quên mật khẩu (`/forgot-password` → email → `/reset-password`); xác thực email (`/verify-email`); nhận lời mời thành viên (`/accept-invite`) |
 | Tổng quan | KPI: hồ sơ đang mở (nhập/xuất), sắp/quá hạn khai, tỷ lệ trường cần sửa, tờ khai đã truyền. "Cần xử lý" sắp theo hạn khai. "Kết quả khai báo gần đây" kèm phân luồng |
-| Hồ sơ khai báo | Danh sách: cột **Trạng thái** hiện tiến độ khai báo (Chưa khai báo → Đã khai tạm → Đã khai chính thức → … → Đã thông quan; kèm luồng khi chờ thông quan, "k/N" với lô nhiều tờ), tab việc cần làm (`?viec=`) có số đếm, lọc theo bước/hạn; mở hồ sơ vào đúng bước đang dở. Bước Khai báo: mỗi tờ hiện khai báo · luồng · thông quan, có "Mở lại để sửa" khi chưa có số tờ khai và "Xác nhận tờ khai đã hủy" (chi tiết `docs/QUY-TRINH-NGHIEP-VU.md` mục 3, 9.2) |
+| Hồ sơ khai báo | Danh sách: cột **Trạng thái** hiện tiến độ khai báo (Chưa khai báo → Đã khai tạm → Đã khai chính thức → … → Đã thông quan; kèm luồng khi chờ thông quan, "k/N" với lô nhiều tờ), tab việc cần làm (`?viec=`) có số đếm, lọc theo bước/hạn; mở hồ sơ vào đúng bước đang dở. Bước Khai báo: mỗi tờ hiện khai báo · luồng · thông quan, có "Mở lại để sửa" khi chưa có số tờ khai hoặc có tờ đã gọi về (IDB/EDB/IDD/EDD) và "Xác nhận tờ khai đã hủy" (chi tiết `docs/QUY-TRINH-NGHIEP-VU.md` mục 3, 9.2) |
 | Tạo hồ sơ | Bước 1 |
 | Chi tiết hồ sơ | Thanh 6 bước + màn của bước hiện tại (bước 2–6) |
 | Khai báo Hải quan | Danh sách tờ khai đã/đang truyền: hồ sơ, nghiệp vụ, số tờ khai, phân luồng, trạng thái, cập nhật. Lô nhiều tờ: mỗi tờ một dòng, cột **Tờ** ghi "2/3" |

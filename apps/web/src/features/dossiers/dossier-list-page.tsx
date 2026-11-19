@@ -3,7 +3,7 @@ import {
   Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, DataTableFilterSelect, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Stack, StepProgress, Tabs, TabsContent, TabsList, TabsTrigger, toast, type UiLocale, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Trash2, Truck, XCircle, type LucideIcon } from "lucide-react";
+import { Container, Download, FolderOpen, Package, Plane, Plus, Printer, Ship, TrainFront, Trash2, Truck, XCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -17,6 +17,7 @@ import { DIRECTION_LABELS } from "./dossier-display";
 import { channelLabel, DossierProgressBadge, progressLabel, progressOfDossier, stepState } from "./dossier-progress-badge";
 import { DOSSIER_PROGRESS_MESSAGES } from "./dossier-progress.messages";
 import { channelOfDossier, inViec, parseChannel, parseViec, type ChannelFilter, PROGRESS_FILTER_ORDER, VIEC_TABS, type Viec } from "./dossier-progress-tabs";
+import { declarationPrintHref } from "../declaration-print/declaration-print-page";
 import { DOSSIER_LIST_MESSAGES } from "./dossiers.messages";
 
 /** Hình đầu thẻ theo phương thức vận chuyển (chỉ trang trí – nghĩa nằm ở chữ trên thẻ). */
@@ -34,6 +35,8 @@ const TAB_LABEL = { all: "tabAll", todo: "tabTodo", "await-official": "tabAwaitO
 type Scope = "ALL" | Direction;
 
 /** Hồ sơ đã truyền Hải quan (có số tờ khai / trạng thái Hải quan) giữ để đối chiếu – chỉ hủy, không xóa (backend kiểm lại). */
+/** Đã dựng tờ khai (bước Review trở đi hoặc đã truyền) → in được; chưa có số tờ khai thì bản in là bản nháp. */
+const hasDeclaration = (d: Dossier) => d.step === "review" || d.step === "submit" || sentToCustoms(d);
 const sentToCustoms = (d: Dossier) => d.status === "SUBMITTED" || d.status === "CLEARED" || !!d.declarationNo || !!d.customs;
 
 function DossierStep({ dossier, stepLabels }: { dossier: Dossier; stepLabels: Record<Dossier["step"], string> }) {
@@ -312,6 +315,7 @@ function ListInner() {
                         rowLabel={r.code}
                         actions={[
                           { id: "open", label: t.open, icon: <FolderOpen />, primary: true, onSelect: () => router.push(`/dossiers/${r.id}`) },
+                          ...(hasDeclaration(r) ? [{ id: "print", label: t.print, icon: <Printer />, quick: false, onSelect: () => router.push(declarationPrintHref(r.id)) }] : []),
                           {
                             id: "cancel",
                             label: t.cancel,

@@ -152,6 +152,13 @@ export function canReopenUnnumbered(s: SubmissionView): boolean {
   return sheetsOf(s).every((b) => !b.declarationNo && b.stage === "NOT_SENT" && !b.sending && b.pipeline.every((r) => r.status !== "SENDING"));
 }
 
+/** Mở lại để sửa sau khi gọi về thành công (IDB/EDB → RECALLED, IDD/EDD → AMEND_RECALLED) mà tờ khai vẫn SUBMITTED; không tờ nào đang gửi (backend chặn lần nữa). */
+export function canReopenRecalled(s: SubmissionView): boolean {
+  if (s.declarationStatus !== "SUBMITTED") return false;
+  const sheets = sheetsOf(s);
+  return sheets.some((b) => b.stage === "RECALLED" || b.stage === "AMEND_RECALLED") && sheets.every((b) => !b.sending && b.pipeline.every((r) => r.status !== "SENDING"));
+}
+
 /** Tờ có thể ghi nhận "đã hủy": đã có số, chưa thông quan, chưa hủy / từ chối. */
 export function canCancelSheet(b: Pick<BranchSubmission, "declarationNo" | "stage">): boolean {
   return Boolean(b.declarationNo) && b.stage !== "NOT_SENT" && b.stage !== "CLEARED" && !b.stage.startsWith("POST_") && b.stage !== "CANCELLED" && b.stage !== "REJECTED";

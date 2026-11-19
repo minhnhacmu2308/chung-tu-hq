@@ -2561,3 +2561,42 @@ describe("mở lại khi chưa có số tờ khai (spec trạng thái hồ sơ �
     expect(decls.reopened).toEqual([]);
   });
 });
+
+describe("mở lại sau khi gọi về thành công (IDB/EDB/IDD/EDD) mà tờ khai vẫn SUBMITTED", () => {
+  beforeEach(() => {
+    dossiers.rows[0]!.status = "SUBMITTED";
+    decls.status = "SUBMITTED";
+  });
+
+  it.each(["RECALLED", "AMEND_RECALLED"] as const)("tờ có số ở giai đoạn %s → mở lại, giữ giai đoạn và số tờ khai", async (stage) => {
+    seedBranch(1, { raw: { stage, certificateId: "cert_1" } });
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.reopened).toEqual([D]);
+    expect(uow.data.results[0]).toMatchObject({ declarationNo: expect.any(String), raw: expect.objectContaining({ stage }) });
+  });
+
+  it("lô 2 tờ: tờ 1 DECLARED, tờ 2 AMEND_RECALLED → mở lại được", async () => {
+    seedBranch(1, { raw: { stage: "DECLARED", certificateId: "cert_1" } });
+    seedBranch(2, { raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.reopened).toEqual([D]);
+  });
+
+  it("đã gọi về nhưng đang gửi lại nội dung (IDA PENDING) → DECLARATION_SENDING", async () => {
+    seedBranch(1, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    seedOutbox({ operation: "IDA", status: "PENDING" });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "DECLARATION_SENDING" } });
+    expect(decls.reopened).toEqual([]);
+  });
+
+  it("org khác → NOT_FOUND, không mở lại", async () => {
+    seedBranch(1, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    expect(await reopenDeclaration(deps, other, D)).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(decls.reopened).toEqual([]);
+  });
+
+  it("chưa gọi về (PRE_DECLARED có số) → vẫn DOSSIER_LOCKED", async () => {
+    seedBranch(1, { raw: { stage: "PRE_DECLARED", certificateId: "cert_1" } });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
+  });
+});

@@ -31,6 +31,8 @@ async function renderPrint(locale?: "en" | "zh") {
 beforeEach(() => {
   resetDb();
   window.localStorage.removeItem("kb-print-quick-edit");
+  // Bảng phím tắt tự mở lần đầu bật công tắc – các test khác coi như đã xem.
+  window.localStorage.setItem("kb-print-quick-shortcuts-seen", "1");
 });
 
 describe("Sửa nhanh tại ô", () => {
@@ -40,6 +42,27 @@ describe("Sửa nhanh tại ô", () => {
     await userEvent.click(cell(":TK_ENC"));
     expect(await screen.findByRole("dialog", undefined, T)).toBeTruthy();
   });
+
+  it("nút Phím tắt chỉ hiện khi bật; lần đầu bật tự mở bảng phím tắt một lần, không còn khung Alert hướng dẫn", async () => {
+    window.localStorage.removeItem("kb-print-quick-shortcuts-seen");
+    const user = userEvent.setup();
+    const { unmount } = await renderPrint();
+    expect(screen.queryByRole("button", { name: "Phím tắt" })).toBeNull();
+    await user.click(screen.getByRole("switch", { name: "Sửa nhanh tại ô" }));
+    const dlg = await screen.findByRole("dialog", { name: "Phím tắt" }, T);
+    expect(dlg.textContent).toContain("Phím tắt khi sửa nhanh tại ô");
+    expect(dlg.textContent).toContain("Sửa giá trị đang có");
+    expect(screen.queryByText(/^Bấm ô rồi gõ để nhập thẳng/)).toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Phím tắt" })).toBeNull(), T);
+    unmount();
+    // Lần sau (công tắc đã nhớ là bật): không tự mở nữa, bấm nút mới mở.
+    await renderPrint();
+    const btn = await screen.findByRole("button", { name: "Phím tắt" }, T);
+    expect(screen.queryByRole("dialog", { name: "Phím tắt" })).toBeNull();
+    await user.click(btn);
+    expect(await screen.findByRole("dialog", { name: "Phím tắt" }, T)).toBeTruthy();
+  }, 120_000);
 
   it("bật: gõ thẳng vào ô 1.58, Enter chốt (chưa lưu), thanh nổi lưu một lần; không vi phạm a11y", async () => {
     const user = userEvent.setup();

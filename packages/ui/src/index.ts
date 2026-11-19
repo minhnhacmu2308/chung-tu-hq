@@ -4,6 +4,7 @@ export { Button, buttonVariants, type ButtonProps } from "./components/button.js
 export { Spinner, type SpinnerProps } from "./components/spinner.js";
 export { Field, FieldFrame, Label, useFieldControl, type FieldFrameProps, type FieldProps } from "./components/field.js";
 export { Abbreviation, type AbbreviationProps } from "./components/abbreviation.js";
+export { HelpPopover, ShortcutList, type HelpPopoverProps, type ShortcutItem } from "./components/help-popover.js";
 export { NoticeChip, type NoticeChipProps, type NoticeItem, type NoticeTone } from "./components/notice-chip.js";
 export { PaperStack, PaperSheet, PaperField, PaperColumns, PaperLabel, type PaperSheetProps, type PaperFieldProps, type PaperFieldState, type PaperFieldEdit } from "./components/paper.js";
 export { FloatingActionBar, type FloatingActionBarProps } from "./components/floating-action-bar.js";

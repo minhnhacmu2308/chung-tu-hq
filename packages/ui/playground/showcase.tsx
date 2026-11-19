@@ -1,8 +1,8 @@
 // Trình diễn các component dữ liệu / nhập liệu / phản hồi của @kb/ui.
-import { Bell, Copy, Filter, FolderOpen, Landmark, MailOpen, MoreHorizontal, Trash2, XCircle } from "lucide-react";
+import { Bell, Copy, Filter, FolderOpen, Keyboard, Landmark, MailOpen, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable, DataTableFilterSelect,
+  Abbreviation, HelpPopover, ShortcutList, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable, DataTableFilterSelect,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   BrandMark, FeedGroup, FeedItem, SearchInput, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, FloatingActionBar, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -286,6 +286,14 @@ export function Showcase() {
               <Field label="Cảng dỡ hàng" hint="Gõ không dấu: “hai phong” · nút Mở rộng để đọc hết mô tả"><Combobox options={PORTS} value={port} onChange={setPort} clearable expandable /></Field>
               <Field label="Loại chứng từ"><Combobox multiple options={DOC_TYPES} value={docs} onChange={setDocs} /></Field>
               <Field label={<>1.5 · <Abbreviation short="Mã PLHH" full="Mã phân loại hàng hóa" /></>} hint="Nhãn dài viết tắt – bấm chữ gạch chấm xem tên đầy đủ"><Input /></Field>
+              <div className="flex items-center gap-2 text-sm">
+                Tờ khai nhập khẩu (IDA)
+                <HelpPopover title="Tờ khai chưa khai báo – nhập đủ chỉ tiêu">Bấm vào ô trên bản in để mở panel sửa. Chỉ tiêu tính từ chứng từ chỉ đọc.</HelpPopover>
+                <span className="ml-4">Sửa nhanh tại ô</span>
+                <HelpPopover label="Phím tắt" icon={<Keyboard aria-hidden="true" className="h-4 w-4" />} title="Phím tắt khi sửa nhanh">
+                  <ShortcutList items={[{ keys: ["Ctrl", "V"], label: "Dán" }, { keys: ["Enter"], label: "Chốt giá trị" }, { keys: ["F2"], label: "Sửa giá trị đang có" }, { keys: ["Delete"], label: "Xóa ô" }]} />
+                </HelpPopover>
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 <NoticeChip tone="danger" label="Khác HS hóa đơn" description="Khác mã HS trên hóa đơn (940511)." />
                 <NoticeChip tone="warning" label="Tin cậy thấp 42%" description="Độ tin cậy thấp (42%): kiểm tra kỹ mô tả và mã thay thế trước khi xác nhận." />

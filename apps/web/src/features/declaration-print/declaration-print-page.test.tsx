@@ -46,6 +46,12 @@ describe("Trang in tờ khai", () => {
     expect(screen.getByRole("link", { name: /Về Review tờ khai/ }).getAttribute("href")).toBe(`/dossiers/${id}?step=review`);
   }, 30_000);
 
+  it("lô nhiều tờ: mở đúng tờ ?to, không có khung 'Áp dụng cho cả N tờ khai' (hướng dẫn sửa – trang chỉ đọc)", async () => {
+    renderWithProviders(<DeclarationPrintPage dossierId="dos_028" sheet={2} />);
+    expect(await screen.findByRole("radio", { name: /Tờ 2\/3/, checked: true }, T)).toBeTruthy();
+    expect(screen.queryByText(/Áp dụng cho cả \d+ tờ khai/)).toBeNull();
+  }, 30_000);
+
   it("hồ sơ chưa có tờ khai → EmptyState kèm nút về hồ sơ", async () => {
     const db = getDb();
     const id = db.dossiers.find((d) => d.step === "upload")!.id;

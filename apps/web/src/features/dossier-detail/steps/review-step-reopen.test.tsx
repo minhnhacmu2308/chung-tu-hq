@@ -43,14 +43,14 @@ describe("ReviewStep – mở lại tờ khai đã truyền chưa có số", () 
   it("đang gửi → không hiện nút", async () => {
     api.current = submissionOf([branch(1, 1, "NOT_SENT", { pipeline: sendingRows, sending: true })]);
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    await screen.findAllByText("Tờ khai chỉ đọc", {}, T);
+    await screen.findByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" }, T);
     expect(screen.queryByRole("button", { name: "Mở lại để sửa" })).toBeNull();
   }, 40_000);
 
   it("tờ đã có số → không hiện nút", async () => {
     api.current = submissionOf([branch(1, 1, "PRE_DECLARED")]);
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    await screen.findAllByText("Tờ khai chỉ đọc", {}, T);
+    await screen.findByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" }, T);
     expect(screen.queryByRole("button", { name: "Mở lại để sửa" })).toBeNull();
   }, 40_000);
 });

@@ -157,6 +157,7 @@ export function ItemsTable({
   fields,
   activeId,
   onActivate,
+  onHover = onActivate,
   onSave,
   onSaveMany,
   onConfirm,
@@ -165,6 +166,8 @@ export function ItemsTable({
   fields: ExtractedField[];
   activeId: string | null;
   onActivate: (id: string | null) => void;
+  /** Rê chuột qua dòng: chỉ tô vùng trên chứng từ. Không truyền → dùng onActivate. */
+  onHover?: (id: string | null) => void;
   onSave: (id: string, value: string) => void;
   /** Lưu nhiều ô một lần (áp xuất xứ cho các dòng đã chọn); lỗi thì hook đã báo – reject để giữ dòng đang chọn. */
   onSaveMany: (edits: { id: string; value: string }[]) => Promise<unknown>;
@@ -352,7 +355,7 @@ export function ItemsTable({
           );
         }}
         rowTone={(l) => (CELLS.some((c) => l.cells[c]?.id === activeId) ? "active" : l.suspects.length > 0 || (l.cells.origin && isMissingOrigin(l.cells.origin)) ? "warning" : undefined)}
-        onRowHover={(l) => onActivate(l ? ((l.suspects[0] ?? l.cells.description ?? l.cells.amount)?.id ?? null) : null)}
+        onRowHover={(l) => onHover(l ? ((l.suspects[0] ?? l.cells.description ?? l.cells.amount)?.id ?? null) : null)}
         pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
         revealRowId={lines.find((l) => CELLS.some((c) => l.cells[c]?.id === activeId))?.id ?? null}
         className="max-h-176"

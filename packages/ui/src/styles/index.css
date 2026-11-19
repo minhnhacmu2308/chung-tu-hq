@@ -338,6 +338,14 @@
   top: var(--kb-shell-top);
 }
 
+/*
+ * Khung dính cạnh một cột dài (khung chứng từ ở bước OCR): cao bằng màn hình trừ thanh menu trên, lề top-shell (1rem) và thanh thao tác
+ * dính đáy trang (~4.5rem + 1rem) – khung luôn lấp cột khi cuộn, không chừa mảng trống. Màn thấp vẫn tối thiểu 28rem.
+ */
+@utility h-shell-pane {
+  height: max(28rem, calc(100dvh - var(--kb-shell-top) - 6.5rem));
+}
+
 /* Mép phải của cột dính trong bảng: một đường kẻ mảnh để thấy ranh giới khi nội dung cuộn ngang bên dưới. */
 @utility sticky-col-edge {
   box-shadow: inset -1px 0 0 var(--kb-color-border);

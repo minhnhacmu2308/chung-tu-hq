@@ -41,6 +41,14 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
   const t = useMessages(OCR_STEP_MESSAGES);
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
+  // Rê chuột chỉ tô vùng trên chứng từ (không cuộn khung, không đổi trang) và trễ 120ms: lăn trang lướt qua các ô không làm cả bước render lại liên tục.
+  const [hover, setHover] = useState<string | null>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onHover = (id: string | null) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHover(id), id ? 120 : 0);
+  };
+  useEffect(() => () => void (hoverTimer.current && clearTimeout(hoverTimer.current)), []);
   const m = useFieldMutations(dossierId);
   // Link file gốc hết hạn sau 10 phút → lấy lại sau 8 phút.
   const fileQuery = useQuery({
@@ -186,12 +194,13 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
           document={doc}
           file={file}
           fields={fields}
-          highlightFieldId={pick ? null : active}
+          highlightFieldId={pick ? null : hover ?? active}
+          revealFieldId={pick ? null : active}
           onFieldClick={jumpTo}
           picking={!!pick}
           onPick={onPick}
           onTextReady={setTextApi}
-          className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-176 cq-lg:self-start"
+          className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-shell-pane cq-lg:self-start"
         />
         <Stack gap="md" className="min-w-0">
           {visible.length === 0 && !showItems ? (
@@ -211,6 +220,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
                     field={f}
                     active={active === f.id}
                     onActivate={setActive}
+                    onHover={onHover}
                     onSave={save}
                     onConfirm={confirm}
                     onRevert={revert}
@@ -231,7 +241,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
           <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
             {groupLabels.ITEMS}
           </h3>
-          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onSaveMany={(edits) => m.updateMany.mutateAsync(edits)} onConfirm={confirm} {...(merge ? { merge } : {})} />
+          <ItemsTable fields={items} activeId={active} onActivate={setActive} onHover={onHover} onSave={save} onSaveMany={(edits) => m.updateMany.mutateAsync(edits)} onConfirm={confirm} {...(merge ? { merge } : {})} />
         </section>
       )}
     </div>

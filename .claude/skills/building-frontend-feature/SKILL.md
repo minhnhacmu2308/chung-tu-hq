@@ -69,7 +69,7 @@ apps/web/src/
 | Cập nhật khi có thông báo mới / báo ra máy tính | Đã có sẵn ở khung app: `useNotificationStream` (SSE `/api/notifications/stream`, ADR 0017) làm mới mọi query dưới `sessionKeys.notifications` + toast + Notification API theo tùy chọn trong panel Thông báo. Màn cần cập nhật theo thông báo → đặt query dưới khóa đó | Mở thêm EventSource / `setInterval` poll riêng trong màn; gọi `new Notification` tự ghép |
 | Ô icon nền dịu ở đầu thẻ / đầu dòng | `IconTile` (`tone`, `size`) | Tự ghép `span` + `bg-*-subtle` (lint `apps-icon-tile` chặn) |
 | Bảng vai trò × quyền | `PermissionMatrix` (`@/components/common/permission-matrix`) | `<table>` tự viết (lint `apps-raw-table` chặn) |
-| Phần tử dính đầu trang trong màn | class `top-shell` (tự né thanh menu khi người dùng chọn menu ở trên) | `top-4`, `top-0` |
+| Phần tử dính đầu trang trong màn | class `top-shell` (tự né thanh menu khi người dùng chọn menu ở trên); khung dính cao theo màn hình (khung chứng từ cạnh cột dài) `h-shell-pane` | `top-4`, `top-0`; chiều cao cứng `h-176` để lại mảng trống |
 | Khối hiện lần lượt khi vào trang | prop `stagger` của `Grid`/`Stack` (tối đa 1–2 khối mỗi màn) | Tự viết animation, thư viện motion |
 | Logo | `BrandMark` (`small` khi ≤ 24px, `decorative` khi đứng cạnh tên) | Nhúng file SVG có mã màu |
 | Logo / ảnh đại diện riêng của doanh nghiệp, người dùng | `orgLogoSrc` / `memberAvatarSrc` (`@/api/branding`) → `Sidebar brand.logoSrc`, `SidebarUser avatarSrc`, `Avatar src`; chọn/gỡ ảnh: `ImagePicker` (+ `ConfirmDialog` khi gỡ) | `<img src="/api/...">` tự ghép; `<input type="file">` thô; tự dựng URL ảnh trong feature (mock không có route ảnh) |

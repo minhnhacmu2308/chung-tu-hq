@@ -37,6 +37,11 @@ export type DocumentViewerProps = {
   regions?: readonly DocumentRegion[];
   /** Vùng đang được tô (vd trường người dùng đang rê chuột). Tự chuyển tới trang chứa vùng. */
   highlightId?: string | null;
+  /**
+   * Vùng cần cuộn tới trong khung (vd trường vừa bấm / Tab vào). Mặc định = `highlightId`. Truyền riêng khi rê chuột chỉ cần tô:
+   * tự cuộn theo từng lần rê chuột lúc người dùng đang lăn trang làm khung giật.
+   */
+  revealId?: string | null;
   /** Bấm vào một vùng (vd để nhảy tới trường tương ứng). Không truyền → vùng chỉ để hiển thị. */
   onRegionClick?: (id: string) => void;
   /** Trang hiện tại (1-based) – điều khiển từ ngoài. */
@@ -70,6 +75,7 @@ export function DocumentViewer({
   toolbarEnd,
   regions = [],
   highlightId = null,
+  revealId,
   onRegionClick,
   page: pageProp,
   defaultPage = 1,
@@ -115,16 +121,25 @@ export function DocumentViewer({
     setFit(false);
   };
 
-  // Vùng được tô nằm trang khác → chuyển trang, rồi cuộn tới vùng.
-  const highlighted = regions.find((r) => r.id === highlightId);
+  // Vùng cần hiện (mặc định = vùng tô) nằm trang khác → chuyển trang, rồi cuộn tới vùng. Vùng chỉ tô khi rê chuột không đổi trang.
+  const reveal = revealId === undefined ? highlightId : revealId;
+  const target = regions.find((r) => r.id === reveal);
   useEffect(() => {
-    if (highlighted && highlighted.page !== page) setPage(highlighted.page);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ phản ứng khi đổi vùng tô
-  }, [highlighted?.id, highlighted?.page]);
+    if (target && target.page !== page) setPage(target.page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ phản ứng khi đổi vùng cần hiện
+  }, [target?.id, target?.page]);
   const highlightRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    highlightRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "smooth" });
-  }, [highlightId, page]);
+    // Chỉ cuộn TRONG khung xem (scrollIntoView cuộn cả trang → giành cuộn với người dùng, trang bị khựng).
+    const el = highlightRef.current;
+    const box = scrollRef.current;
+    if (!el || !box || !reveal || el.dataset.region !== reveal) return;
+    const r = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    const dy = r.top < b.top ? r.top - b.top - 16 : r.bottom > b.bottom ? r.bottom - b.bottom + 16 : 0;
+    const dx = r.left < b.left ? r.left - b.left - 16 : r.right > b.right ? r.right - b.right + 16 : 0;
+    if (dx || dy) box.scrollBy?.({ top: dy, left: dx, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [reveal, page]);
 
   const pageRegions = onAreaSelect ? [] : regions.filter((r) => r.page === page);
 
@@ -217,7 +232,7 @@ export function DocumentViewer({
                 "absolute left-[var(--rx)] top-[var(--ry)] h-[var(--rh)] w-[var(--rw)] overflow-hidden rounded-sm text-left transition-colors",
                 active ? "bg-primary/15 ring-2 ring-primary" : showRegions ? "ring-1 ring-primary/30" : "ring-0",
               );
-              const setRef = active ? (el: HTMLElement | null) => void (highlightRef.current = el) : undefined;
+              const setRef = r.id === reveal ? (el: HTMLElement | null) => void (highlightRef.current = el) : undefined;
               return onRegionClick && r.label ? (
                 <button
                   key={r.id}

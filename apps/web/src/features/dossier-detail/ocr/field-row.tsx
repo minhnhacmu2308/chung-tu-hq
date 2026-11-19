@@ -12,6 +12,8 @@ export type FieldRowProps = {
   field: ExtractedField;
   active: boolean;
   onActivate: (id: string | null) => void;
+  /** Rê chuột: chỉ tô vùng trên chứng từ. Không truyền → dùng onActivate (hành vi cũ). */
+  onHover?: (id: string | null) => void;
   onSave: (id: string, value: string) => void;
   onConfirm: (id: string) => void;
   onRevert: (id: string) => void;
@@ -44,7 +46,7 @@ export const isUnknownPayment = (f: ExtractedField, hint?: PaymentHint) => f.key
 export const ocrRows = (fields: ExtractedField[]) => fields.filter((f) => !isHiddenOcrRow(f.key));
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((p) => ({ value: p.code, label: `${p.code} – ${p.label}` }));
 
-export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false, paymentHint: hint, manualCard = false }: FieldRowProps) {
+export function FieldRow({ field, active, onActivate, onHover = onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false, paymentHint: hint, manualCard = false }: FieldRowProps) {
   const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
   useEffect(() => setValue(field.value), [field.value]);
@@ -73,8 +75,8 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
         "flex scroll-mt-24 flex-col gap-1.5 rounded-md border px-3 py-2.5 transition-colors",
         active ? "border-primary bg-primary-subtle" : suspect ? "border-warning bg-warning-subtle" : "border-transparent hover:bg-surface-muted",
       )}
-      onMouseEnter={() => onActivate(field.id)}
-      onMouseLeave={() => onActivate(null)}
+      onMouseEnter={() => onHover(field.id)}
+      onMouseLeave={() => onHover(null)}
       onFocus={() => onActivate(field.id)}
     >
       <div className="flex items-center justify-between gap-2">

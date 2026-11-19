@@ -39,6 +39,7 @@ import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { hasSigningPortError, SigningPortAlert } from "./signing-port-alert";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
 import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
+import { LoadError } from "@/components/common/load-error";
 import { MessageList } from "./message-list";
 import { HysCard } from "./hys/hys-card";
 import { KVGS_EDITORS, KvgsCard, kvgsAnchor } from "./kvgs/kvgs-card";
@@ -676,6 +677,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const certExpired = selected ? selected.validTo < new Date().toISOString().slice(0, 10) : false;
   /** Đã tải xong danh sách mà doanh nghiệp chưa có chứng thư số nào → không ký/gửi khai tạm được. */
   const certMissing = certQ.isSuccess && certs.length === 0;
+  /** Lỗi tải danh sách chứng thư → báo rõ + tải lại (không để nút Ký số / IDA khóa hay bỏ qua im lặng). */
+  const certLoadAlert = certQ.isError ? <LoadError title={t.certLoadFailed} onRetry={() => void certQ.refetch()} /> : null;
   const sending = s.pipeline.find((r) => r.status === "SENDING");
   const anySending = sheets.some((b) => b.pipeline.some((r) => r.status === "SENDING"));
   const anyBusy = anySending || perform.isPending || recallAll.isPending || resend.isPending || submit.isPending;
@@ -721,7 +724,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       if (firstSend && branch === 1 && baseOp(r.op) === "IDA") {
         if (firstBlock) return undefined;
         // Nút trên dòng nghiệp vụ: như nút Ký số – chưa có / hết hạn chứng thư thì báo, không gửi (server trả 400 certificateId).
-        // Danh sách chứng thư chưa tải xong / lỗi tải → chưa biết có hay không: bỏ qua lần bấm (không báo nhầm "chưa có chứng thư").
+        // Lỗi tải danh sách chứng thư → báo lỗi tải (không báo nhầm "chưa có chứng thư"); đang tải → bỏ qua lần bấm.
+        if (certQ.isError) return toast({ tone: "danger", title: t.certLoadFailed });
         if (!certQ.isSuccess) return undefined;
         if (!selectedId || certExpired) return toast({ tone: "warning", title: selectedId ? t.certExpired : t.certMissing });
         return submit.mutate();
@@ -912,6 +916,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                 {billingNotice}
                 {certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
                 {certMissing && <Alert tone="warning">{t.certMissing}</Alert>}
+                {certLoadAlert}
               </Stack>
             </CardContent>
           )}
@@ -1010,6 +1015,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               {firstSend && billingNotice}
               {firstSend && certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
               {firstSend && certMissing && <Alert tone="warning">{t.certMissing}</Alert>}
+              {firstSend && certLoadAlert}
 
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
                 <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} extra={p.id === "DOCS" ? kvgsCardFor(sheets[0]) : null} />

@@ -12,14 +12,17 @@ import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { SubmitStep } from "./submit-step";
 
-const api = vi.hoisted(() => ({ current: null as SubmissionView | null, submit: vi.fn(), noCerts: false }));
+const api = vi.hoisted(() => ({ current: null as SubmissionView | null, submit: vi.fn(), noCerts: false, certsFail: false }));
 vi.mock("@/api/customs", async (orig) => {
   const real = await orig<typeof import("@/api/customs")>();
   return {
     ...real,
     getSubmission: async () => api.current!,
     submitDeclaration: (...a: unknown[]) => api.submit(...a),
-    listCertificates: async () => (api.noCerts ? [] : [{ id: "cert_1", subject: "CÔNG TY MẪU", issuer: "VNPT-CA", serial: "540100000000000001", validTo: "2099-12-31", isDefault: true }]),
+    listCertificates: async () => {
+      if (api.certsFail) throw new Error("500");
+      return api.noCerts ? [] : [{ id: "cert_1", subject: "CÔNG TY MẪU", issuer: "VNPT-CA", serial: "540100000000000001", validTo: "2099-12-31", isDefault: true }];
+    },
   };
 });
 // Tờ khai mẫu không có ô bắt buộc trống – bước này chỉ kiểm phần gói.
@@ -64,6 +67,7 @@ beforeEach(() => {
   resetDb();
   api.submit.mockReset().mockResolvedValue({ sent: true, message: "ok" });
   api.noCerts = false;
+  api.certsFail = false;
 });
 
 describe("Bước Truyền tờ khai – chứng thư số", () => {
@@ -74,6 +78,21 @@ describe("Bước Truyền tờ khai – chứng thư số", () => {
     renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText(/Chưa có chứng thư số để ký/, undefined, T)).toBeTruthy();
     expect(((await signButton()) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.submit).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it("lỗi tải danh sách chứng thư: báo lỗi tải (không báo nhầm \"chưa có\"), Tải lại xong thì Ký số mở", async () => {
+    setBalance(20);
+    api.certsFail = true;
+    api.current = firstSend();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    expect(await screen.findByText(/Không tải được danh sách chứng thư số/, undefined, T)).toBeTruthy();
+    expect(screen.queryByText(/Chưa có chứng thư số để ký/)).toBeNull();
+    expect(((await signButton()) as HTMLButtonElement).disabled).toBe(true);
+    api.certsFail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
+    await waitFor(() => expect(screen.queryByText(/Không tải được danh sách chứng thư số/)).toBeNull(), T);
+    await waitFor(async () => expect(((await signButton()) as HTMLButtonElement).disabled).toBe(false), T);
     expect(api.submit).not.toHaveBeenCalled();
   }, 20_000);
 });

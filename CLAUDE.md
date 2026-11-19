@@ -50,8 +50,12 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 | Thiếu component/biến thể/token, sửa @kb/ui hoặc tùy chọn giao diện | `adding-ui-component` |
 | Sửa prompt, schema trích xuất, đổi model AI | `changing-extraction-prompt-or-model` |
 | Thêm/sửa ánh xạ sang chỉ tiêu tờ khai | `mapping-declaration-fields` |
+| Commit thay đổi (nhánh tính năng, review, thông điệp tiếng Việt) | `hq-commit` |
+| Mở Pull Request vào main | `hq-pr` |
 
 ## Trước khi commit / push – BẮT BUỘC
+
+**Không commit/push thẳng vào `main`.** Làm trên nhánh `<loại>/<tên-tính-năng>` → commit bằng skill `hq-commit` → mở PR bằng skill `hq-pr` → reviewer duyệt rồi merge trên GitHub. Thông điệp commit/PR bằng tiếng Việt, tên tính năng rõ ràng, ghi đang làm gì.
 
 Mọi yêu cầu commit, push, mở PR, deploy: **chạy song song 2 agent review** (`.claude/agents/`) rồi mới `git commit`/`git push`:
 

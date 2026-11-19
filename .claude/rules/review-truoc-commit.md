@@ -18,7 +18,8 @@
    - hq-review-frontend: ✅ PASS – typecheck ✅ · lint ✅ · test @kb/ui 600 ✅ · web 1200 ✅ · trình duyệt: sáng/tối 1366/390 đã xem
    ```
    Có mục được bỏ qua thì thêm `Review-override: <mục> – <lý do, ai chấp nhận>`. PR: mục "Review" trong mô tả PR, cùng nội dung (kèm bảng FAIL đã sửa nếu có). Commit/PR thiếu khối này là chưa đúng quy trình – reviewer trả lại.
-6. Dev tự commit ngoài Claude: chạy `claude --agent hq-review-backend` / `hq-review-frontend` (hoặc nhờ Claude "chạy 2 agent review") trước khi push.
+6. Commit và PR đi theo skill `hq-commit` (nhánh tính năng, không commit trên `main`, thông điệp tiếng Việt có "Đang làm" + khối Review) và `hq-pr` (PR vào `main`, không tự merge).
+7. Dev tự commit ngoài Claude: chạy `claude --agent hq-review-backend` / `hq-review-frontend` (hoặc nhờ Claude "chạy 2 agent review") trước khi push.
 
 ## Vì sao
 

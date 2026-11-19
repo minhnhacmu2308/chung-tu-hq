@@ -1,9 +1,9 @@
 "use client";
-// Sửa / xác nhận / hoàn tác một trường – cập nhật cache ngay để thao tác mượt, rồi đồng bộ số trường nghi ngờ của hồ sơ.
+// Sửa / xác nhận / hoàn tác một trường (sửa nhiều trường: updateMany) – cập nhật cache ngay để thao tác mượt, rồi đồng bộ số trường nghi ngờ của hồ sơ.
 import { useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dossierKeys } from "@/api/dossiers";
-import { confirmField, ocrKeys, revertField, updateFieldValue } from "@/api/ocr";
+import { confirmField, ocrKeys, revertField, updateFieldValue, updateFieldValues } from "@/api/ocr";
 import { valueChargesKeys } from "@/api/value-charges";
 import type { ExtractedField } from "@/mocks/types";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -25,5 +25,16 @@ export function useFieldMutations(dossierId: string) {
     update: useMutation({ mutationFn: ({ id, value }: { id: string; value: string }) => updateFieldValue(id, value), onSuccess: apply, onError: toastMutationError(t.saveFailed) }),
     confirm: useMutation({ mutationFn: (id: string) => confirmField(id), onSuccess: apply, onError: toastMutationError(t.confirmFailed) }),
     revert: useMutation({ mutationFn: (id: string) => revertField(id), onSuccess: apply, onError: toastMutationError(t.revertFailed) }),
+    /** Sửa nhiều trường một lần (1 transaction ở máy chủ) – không gọi update song song: máy chủ ghi đè dữ liệu lô hàng lẫn nhau. */
+    updateMany: useMutation({
+      mutationFn: (edits: { id: string; value: string }[]) => updateFieldValues(dossierId, edits),
+      onSuccess: (saved) => {
+        const byId = new Map(saved.map((f) => [f.id, f]));
+        qc.setQueryData<ExtractedField[]>(ocrKeys.fields(dossierId), (old) => old?.map((x) => byId.get(x.id) ?? x));
+        void qc.invalidateQueries({ queryKey: dossierKeys.all });
+        void qc.invalidateQueries({ queryKey: ocrKeys.checks(dossierId) });
+      },
+      onError: toastMutationError(t.saveFailed),
+    }),
   };
 }

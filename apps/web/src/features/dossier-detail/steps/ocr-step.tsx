@@ -231,7 +231,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
           <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
             {groupLabels.ITEMS}
           </h3>
-          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} {...(merge ? { merge } : {})} />
+          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onSaveMany={(edits) => m.updateMany.mutateAsync(edits)} onConfirm={confirm} {...(merge ? { merge } : {})} />
         </section>
       )}
     </div>

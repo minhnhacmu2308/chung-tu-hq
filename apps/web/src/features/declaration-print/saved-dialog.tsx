@@ -18,7 +18,7 @@ type Props = {
 export function SavedDialog({ open, title, onExit, onStay, onClosed }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onStay()}>
+    <Dialog open={open} onOpenChange={(o) => !o && onStay()} defaultPresentation="modal">
       <DialogContent
         title={fill(t.savedTitle, { title })}
         icon={<CheckCircle2 className="h-4 w-4" />}

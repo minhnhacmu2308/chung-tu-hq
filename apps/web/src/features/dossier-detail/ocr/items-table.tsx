@@ -4,7 +4,7 @@
 // không có thì để trống); Enter lưu và xuống ô cùng cột ở dòng dưới như bảng tính. Rê vào dòng → tô vị trí trên chứng từ.
 // Sửa xong, dòng hàng của tờ khai nháp cập nhật theo.
 import {
-  Alert, Button, cn, Combobox, createDataTableColumnHelper, DataTable, fill, Input, SegmentedControl, Textarea, Tooltip, useMessages, type ComboboxOption,
+  Alert, Button, cn, Combobox, createDataTableColumnHelper, DataTable, fill, Input, SegmentedControl, Textarea, toast, Tooltip, useMessages, type ComboboxOption,
 } from "@kb/ui";
 import { identicalLineGroups, mergedDescription } from "@kb/contracts";
 import { Check, CheckCheck, CheckCircle2, Merge, Split } from "lucide-react";
@@ -158,6 +158,7 @@ export function ItemsTable({
   activeId,
   onActivate,
   onSave,
+  onSaveMany,
   onConfirm,
   merge,
 }: {
@@ -165,12 +166,15 @@ export function ItemsTable({
   activeId: string | null;
   onActivate: (id: string | null) => void;
   onSave: (id: string, value: string) => void;
+  /** Lưu nhiều ô một lần (áp xuất xứ cho các dòng đã chọn); lỗi thì hook đã báo – reject để giữ dòng đang chọn. */
+  onSaveMany: (edits: { id: string; value: string }[]) => Promise<unknown>;
   onConfirm: (id: string) => void;
   merge?: LineMerge;
 }) {
   const t = useMessages(ITEMS_TABLE_MESSAGES);
   const [show, setShow] = useState<"all" | "suspect">("all");
   const [allGroups, setAllGroups] = useState(false);
+  const [applyingOrigin, setApplyingOrigin] = useState(false);
   const codes = useCodeLists(["COUNTRY"] as const);
   const countries = useMemo(() => (codes.lists.COUNTRY ?? []).filter((e) => !e.inactive).map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` })), [codes.lists.COUNTRY]);
 
@@ -318,10 +322,24 @@ export function ItemsTable({
                   placeholder={fill(t.originBulk, { n: withOrigin.length })}
                   options={countries}
                   value={null}
+                  disabled={applyingOrigin}
+                  loading={applyingOrigin}
                   onChange={(v) => {
-                    if (!v) return;
-                    for (const l of withOrigin) if (l.cells.origin!.value !== v) onSave(l.cells.origin!.id, v);
-                    clear();
+                    if (!v || applyingOrigin) return;
+                    const edits = withOrigin.filter((l) => l.cells.origin!.value !== v).map((l) => ({ id: l.cells.origin!.id, value: v }));
+                    const same = withOrigin.length - edits.length;
+                    if (edits.length === 0) {
+                      toast({ tone: "info", title: fill(t.originBulkSame, { n: same, code: v }) });
+                      return clear();
+                    }
+                    setApplyingOrigin(true);
+                    onSaveMany(edits)
+                      .then(() => {
+                        toast({ tone: "success", title: fill(t.originBulkDone, { n: edits.length, code: v }), ...(same > 0 ? { description: fill(t.originBulkSame, { n: same, code: v }) } : {}) });
+                        clear();
+                      })
+                      .catch(() => undefined)
+                      .finally(() => setApplyingOrigin(false));
                   }}
                 />
               )}

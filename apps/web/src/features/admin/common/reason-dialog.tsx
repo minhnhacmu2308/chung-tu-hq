@@ -54,7 +54,7 @@ export function ReasonDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} defaultPresentation="modal">
       <DialogContent title={title} size="sm" icon={icon} {...(description ? { description } : {})}>
         <form
           noValidate

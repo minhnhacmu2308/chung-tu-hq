@@ -72,7 +72,7 @@ export function IncotermChangeDialog({ dossierId, change, saving, onConfirm, onC
   const ready = fit !== "CONFLICT" || (reason !== null && !noteMissing);
 
   return (
-    <Dialog open={change !== null} onOpenChange={(o) => !o && !saving && onCancel()}>
+    <Dialog open={change !== null} onOpenChange={(o) => !o && !saving && onCancel()} defaultPresentation="modal">
       <DialogContent
         title={t.title}
         // Mã cũ → mã mới ở dòng mô tả (tiêu đề một dòng bị cắt trên màn hẹp).

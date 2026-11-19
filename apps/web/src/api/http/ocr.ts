@@ -31,6 +31,7 @@ export async function downloadDocumentSheets(dossierId: string): Promise<Blob> {
 }
 export const listChecks = (dossierId: string) => apiGet(`dossiers/${dossierId}/checks`, z.array(CrossCheckSchema));
 export const updateFieldValue = (fieldId: string, value: string) => apiPatch(`fields/${fieldId}`, { value }, ExtractedFieldSchema);
+export const updateFieldValues = (dossierId: string, edits: { id: string; value: string }[]) => apiPatch(`dossiers/${dossierId}/fields`, { edits }, z.array(ExtractedFieldSchema));
 export const confirmField = (fieldId: string) => apiPost(`fields/${fieldId}/confirm`, {}, ExtractedFieldSchema);
 export const revertField = (fieldId: string) => apiPost(`fields/${fieldId}/revert`, {}, ExtractedFieldSchema);
 export const finishReading = (dossierId: string) => apiPost(`dossiers/${dossierId}/finish-reading`, {}, DossierSchema);

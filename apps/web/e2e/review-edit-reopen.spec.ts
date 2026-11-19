@@ -71,7 +71,10 @@ test("Review: sửa chỉ tiêu trên bản in tờ khai (chặn chỉ tiêu tí
     await expect(approver).toHaveURL(/step=submit/, { timeout: 15_000 });
 
     await approver.goto(full(id));
-    await expect(approver.getByText("Tờ khai chỉ đọc")).toBeVisible(); // đã duyệt: khóa sửa
+    // Đã duyệt: khóa sửa – "Tờ khai chỉ đọc" nằm trong nút ? cạnh tiêu đề, không còn khung Alert.
+    await approver.getByRole("button", { name: "Hướng dẫn sửa tờ khai" }).click();
+    await expect(approver.getByRole("dialog", { name: "Hướng dẫn sửa tờ khai" }).getByText("Tờ khai chỉ đọc")).toBeVisible();
+    await approver.keyboard.press("Escape");
     const locked = await openCell(approver, "VD_ST");
     await expect(locked.getByRole("textbox", { name: KHO })).toHaveCount(0);
     await approver.keyboard.press("Escape");

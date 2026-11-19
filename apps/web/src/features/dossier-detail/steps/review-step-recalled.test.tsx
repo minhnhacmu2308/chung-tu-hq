@@ -53,7 +53,7 @@ describe("ReviewStep – thông báo đã gọi về", () => {
     setStatus("APPROVED");
     nav.query = "step=review&recalled=all:3";
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    await screen.findAllByText("Đã phê duyệt", {}, T);
+    await screen.findAllByText(/phê duyệt lúc/, {}, T);
     expect(screen.queryByText(/Đã gọi về 3 tờ/)).toBeNull();
   }, 90_000);
 });

@@ -37,12 +37,16 @@ describe("ReviewStep – thông báo giai đoạn sửa trên bản in", () => {
     expect(text).toMatch(/Sửa được \d[\d.]* chỉ tiêu người khai nhập/);
   }, 240_000);
 
-  it("đã phê duyệt → chỉ đọc, chỉ cách mở lại / gọi về", async () => {
+  it("đã phê duyệt → không khung Alert: người duyệt là dòng chữ dưới tiêu đề, chỉ đọc + cách mở lại / gọi về nằm trong nút ?", async () => {
     setStatus("APPROVED");
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    expect(await screen.findByText("Tờ khai chỉ đọc", {}, T)).toBeTruthy();
-    expect(screen.getByText(/^Tờ khai đã phê duyệt \/ đã truyền\. Mở lại tờ khai/)).toBeTruthy();
-    expect(screen.queryByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" })).toBeNull();
+    const help = await screen.findByLabelText("Hướng dẫn sửa tờ khai", { selector: "button" }, T);
+    expect(screen.queryByText("Tờ khai chỉ đọc")).toBeNull();
+    expect(screen.getByText(/phê duyệt lúc/)).toBeTruthy();
+    await userEvent.click(help);
+    const dialog = screen.getByRole("dialog", { name: "Hướng dẫn sửa tờ khai" });
+    expect(dialog.textContent).toContain("Tờ khai chỉ đọc");
+    expect(dialog.textContent).toMatch(/Tờ khai đã phê duyệt \/ đã truyền\. Mở lại tờ khai/);
   }, 240_000);
 
   it("tiếng Anh", async () => {

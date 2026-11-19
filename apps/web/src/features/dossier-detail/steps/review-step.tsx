@@ -84,37 +84,38 @@ function AttentionBadge({ decl, items, branches, submission, mode, lineModes, ca
 }
 
 /**
- * Chưa khai báo (sửa đủ chỉ tiêu): hướng dẫn tĩnh, lần nào vào cũng giống nhau → nút ? cạnh tiêu đề tờ khai, không chiếm khung Alert
- * (luật "Thông báo trong trang" – .claude/rules/dung-component-chung.md).
+ * Hướng dẫn tĩnh của giai đoạn sửa (lần nào vào cũng giống nhau) → nút ? cạnh tiêu đề tờ khai, không chiếm khung Alert
+ * (luật "Thông báo trong trang" – .claude/rules/dung-component-chung.md): chưa khai báo → sửa đủ chỉ tiêu; chỉ đọc → không có quyền /
+ * đã thông quan (sửa bằng AMA ở bước 7) / đã duyệt – đã truyền (badge trạng thái góc phải đã nói tờ khai đang ở đâu).
  */
-function StageHelp({ decl }: { decl: Declaration }) {
+function StageHelp({ decl, mode, canEdit, cleared }: { decl: Declaration; mode: DeclarationEditMode; canEdit: boolean; cleared: boolean }) {
   const t = useMessages(REVIEW_MESSAGES);
   const editableCount = useMemo(() => new Set(editableKeys(decl.kind, decl.fields, "FULL").values()).size, [decl.kind, decl.fields]);
+  if (mode === "AMEND") return null;
+  if (mode === "FULL") {
+    return (
+      <HelpPopover label={t.stageHelpLabel} title={t.stageFullTitle}>
+        {fill(t.stageFullBody, { n: formatNumber(editableCount) })}
+      </HelpPopover>
+    );
+  }
   return (
-    <HelpPopover label={t.stageHelpLabel} title={t.stageFullTitle}>
-      {fill(t.stageFullBody, { n: formatNumber(editableCount) })}
+    <HelpPopover label={t.stageHelpLabel} title={t.stageReadTitle}>
+      {!canEdit ? t.stageNoPermission : cleared ? t.stageClearedNote : t.stageLockedNote}
     </HelpPopover>
   );
 }
 
 /**
- * Thông báo giai đoạn sửa tờ khai, đặt trên bản in (chưa khai báo → không có khung, xem StageHelp); đã phân luồng → khai sửa đổi bổ sung
- * (khai tạm sửa đổi IDA01/EDA01); chỉ đọc → không có quyền / đã thông quan (sửa bằng AMA ở bước 7) / đã duyệt – đã truyền.
- * Lô nhiều tờ còn tờ chưa gọi về: khung "Thông tin chung: tờ … chưa gọi về" ở đầu bước đã nói rõ → không nhắc lại.
+ * Khung trên bản in chỉ cho trạng thái cần làm việc: đã phân luồng → khai sửa đổi bổ sung (khai tạm sửa đổi IDA01/EDA01).
+ * Chưa khai báo / chỉ đọc → StageHelp (nút ? cạnh tiêu đề). Lô nhiều tờ còn tờ chưa gọi về: khung "Thông tin chung: tờ … chưa gọi về" ở đầu bước đã nói rõ → không nhắc lại.
  */
-function StageNotice({ decl, mode, canEdit, cleared }: { decl: Declaration; mode: DeclarationEditMode; canEdit: boolean; cleared: boolean }) {
+function StageNotice({ decl, mode }: { decl: Declaration; mode: DeclarationEditMode }) {
   const t = useMessages(REVIEW_MESSAGES);
-  if (mode === "FULL") return null;
-  if (mode === "AMEND") {
-    return (
-      <Alert tone="warning" title={t.stageAmendTitle}>
-        {fill(t.stageAmendBody, { op: decl.kind === "IDA" ? "IDA01" : "EDA01" })}
-      </Alert>
-    );
-  }
+  if (mode !== "AMEND") return null;
   return (
-    <Alert tone="info" title={t.stageReadTitle}>
-      {!canEdit ? t.stageNoPermission : cleared ? t.stageClearedNote : t.stageLockedNote}
+    <Alert tone="warning" title={t.stageAmendTitle}>
+      {fill(t.stageAmendBody, { op: decl.kind === "IDA" ? "IDA01" : "EDA01" })}
     </Alert>
   );
 }
@@ -308,11 +309,17 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <CardTitle className="flex flex-wrap items-center gap-2">
               {kindLabel}
               <span className="font-mono text-sm font-normal text-fg-muted">{dossier.typeCode}</span>
-              {session.isSuccess && subQ.isSuccess && canEdit && editMode === "FULL" && !(isDraft && scope.lockedSheets.length > 0) && <StageHelp decl={decl} />}
+              {session.isSuccess && subQ.isSuccess && !(isDraft && scope.lockedSheets.length > 0) && (
+                <StageHelp decl={decl} mode={canEdit ? editMode : "LOCKED"} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+              )}
             </CardTitle>
             <CardDescription>
               {dossier.partner} · {formatMoney(decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0", dossier.currency)} · {fill(t.lines, { n: items.length })}
             </CardDescription>
+            {/* Đã phê duyệt: trạng thái, không phải việc cần làm → một dòng chữ dưới tiêu đề (badge góc phải đã nói giai đoạn), không chiếm khung Alert. */}
+            {!isDraft && decl.approvedBy && (
+              <CardDescription>{fill(t.approvedBy, { who: decl.approvedBy, at: decl.approvedAt ? formatDateTime(decl.approvedAt) : "—" })}</CardDescription>
+            )}
           </div>
           {isDraft ? (
             <Badge tone="warning">{t.draftBadge}</Badge>
@@ -346,11 +353,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             )}
             {sentWarn.totalValue && <Alert tone="warning">{t.tkTpChanged}</Alert>}
             {sentWarn.otherCommon.length > 0 && <Alert tone="warning">{fill(t.commonChanged, { codes: sentWarn.otherCommon.join(", ") })}</Alert>}
-            {!isDraft && decl.approvedBy && (
-              <Alert tone="success" title={t.approvedTitle}>
-                {fill(t.approvedBy, { who: decl.approvedBy, at: decl.approvedAt ? formatDateTime(decl.approvedAt) : "—" })}
-              </Alert>
-            )}
             {isDraft && <IncotermChangedNote dossierId={dossier.id} />}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={fill(t.suspectTitle, { n: suspect.length })}>
@@ -412,7 +414,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               {subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
                 <Stack gap="md">
                   {session.isSuccess && !(isDraft && scope.lockedSheets.length > 0) && (
-                    <StageNotice decl={decl} mode={canEdit ? editMode : "LOCKED"} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+                    <StageNotice decl={decl} mode={canEdit ? editMode : "LOCKED"} />
                   )}
                   <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} scope={scope} canEdit={canEdit} submission={subQ.data} branches={branches} sheet={sheet} onSheetChange={setSheet} leaveGuard={leaveGuard} />
                 </Stack>

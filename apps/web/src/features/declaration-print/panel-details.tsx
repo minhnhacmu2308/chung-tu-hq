@@ -40,6 +40,8 @@ type Props = {
   onHs: (item: LineItem) => void;
   /** Đang khai sửa đổi – nút nghiệp vụ của ô vận đơn (IDA chỉ còn Chia tách vận đơn). */
   amending?: boolean;
+  /** Chọn số định danh có sẵn (đã giữ cho hồ sơ) cho ô số vận đơn `key` – nơi giữ phần đang sửa trả lại số khi ô bị đổi trước khi Lưu. */
+  onIdentifierTaken?: (taken: { id: string; no: string; key: string }) => void;
 };
 
 /** Nguồn giá trị: chỉ tiêu tờ khai lưu kèm loại chứng từ (`DeclarationField.source`); người khai sửa tay → "Người khai nhập". */
@@ -50,14 +52,20 @@ function sourceLabel(kind: Kind, decl: Declaration, key: string, item: LineItem 
   return labels.docKinds[f.source] ?? null;
 }
 
-export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, busy = false, onHs, amending = false }: Props) {
+export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, busy = false, onHs, amending = false, onIdentifierTaken }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const docKinds = useMessages(DOC_KIND_LABELS);
   const field = spot.field;
   const ctx = conditionContext(kind, values);
   const billCell = !item && isBillCell(kind, field.key);
   // Xác nhận số định danh (panel Khai báo định danh) → điền vào ô số vận đơn cùng dòng với ô đang mở; người khai bấm Lưu để ghi.
-  const onIdentifier = billCell && onChange ? (no: string) => onChange(billNoKey(kind, field.key), no) : undefined;
+  const onIdentifier = billCell && onChange
+    ? (no: string, takenId?: string) => {
+        const key = billNoKey(kind, field.key);
+        onChange(key, no);
+        if (takenId) onIdentifierTaken?.({ id: takenId, no, key });
+      }
+    : undefined;
   const parent = { parentNo: spot.parentNo, parentCondition: spot.parentCondition ?? spot.blockCondition };
   // data-panel-field: panel đặt focus vào đúng ô người dùng chọn trong nhóm.
   const row = (f: LayoutField, extra: typeof parent | object = {}) => (

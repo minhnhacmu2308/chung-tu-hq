@@ -4,10 +4,12 @@
 // điền lại từ lần gửi gần nhất. Bản mẫu (không có hồ sơ) vẫn dùng OperationDialog của transport-operations-bar.
 import { IdentifierRequestSchema, type IdentifierRecord, type IdentifierRequest, type LayoutBlock, type TransportOperationForm } from "@kb/contracts";
 import { hasSigningPortError, SigningPortAlert } from "../dossier-detail/steps/signing-port-alert";
-import { Alert, Barcode, Button, Card, DialogContent, DialogFooter, fill, SkeletonCard, Stack, StatusBadge, toast, useMessages } from "@kb/ui";
+import { Alert, Badge, Barcode, Button, Card, DialogContent, DialogFooter, EmptyState, fill, SkeletonCard, Stack, StatusBadge, toast, useMessages } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, QrCode } from "lucide-react";
+import { Check, ListPlus, QrCode } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { customsOpsKeys, listIdentifiers, takeIdentifier, type IdentifierListItem } from "@/api/customs-ops";
 import { getIdentifier, identifierKeys, pollIdentifier, sendIdentifier, type IdentifierView } from "@/api/identifier";
 import { LoadError } from "@/components/common/load-error";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -24,7 +26,7 @@ const STATUS = { SENDING: "KVGS_SENDING", ACCEPTED: "KVGS_ACCEPTED", REJECTED: "
 const REFRESH_MS = 3_000;
 
 /** Ô của panel (tên chỉ tiêu FPT) ↔ trường yêu cầu gửi backend. */
-const REQUEST_KEYS = {
+export const REQUEST_KEYS = {
   objectType: "LOAI_DT", goodsType: "LOAI_HH", customsOffice: "MA_HQ", taxCode: "MA_DV", companyName: "TEN_DV", agentTaxCode: "MA_DAI_LY", agentName: "TEN_DAI_LY", userId: "USER_ID",
 } as const satisfies Record<keyof IdentifierRequest, string>;
 
@@ -52,7 +54,7 @@ export const resultValues = (r: IdentifierRecord | null): FormValues =>
     : {};
 
 /** Tên chỉ tiêu của ô (tên pháp lý từ @kb/contracts – không dịch). */
-const labelOf = (blocks: LayoutBlock[], key: string): string => {
+export const labelOf = (blocks: LayoutBlock[], key: string): string => {
   for (const b of blocks) for (const i of b.items) {
     if ("key" in i && i.key === key) return i.label;
     if ("fields" in i) for (const f of i.fields) if (f.key === key) return f.label;
@@ -113,10 +115,85 @@ function IdentifierResult({ record, blocks }: { record: IdentifierRecord; blocks
   );
 }
 
+// Lấy tối đa 200 số (giới hạn PageQuerySchema); còn nữa thì báo "còn N số".
+const POOL_QUERY = { status: "AVAILABLE", limit: 200 } as const;
+
+/**
+ * "Chọn số có sẵn": số định danh xin theo lô ở màn Nghiệp vụ khác (/customs/ops) còn dùng được. Chọn → giữ số cho hồ sơ (takeIdentifier)
+ * rồi mới điền; số vừa bị hồ sơ khác giữ → báo lỗi (IDENTIFIER_TAKEN) và tải lại danh sách. Đại lý giữ số cho nhiều MST: mỗi dòng hiện MST/chi cục
+ * được cấp, số cùng MST của hồ sơ lên đầu, rồi số hết hạn sớm trước.
+ */
+function IdentifierPool({ dossierId, taxCode, onPicked }: { dossierId: string; taxCode: string; onPicked: (identifierNo: string, id: string) => void }) {
+  const m = useMessages(IDENTIFIER_MESSAGES);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: customsOpsKeys.identifiers(POOL_QUERY), queryFn: () => listIdentifiers(POOL_QUERY) });
+  const take = useMutation({
+    mutationFn: (id: string) => takeIdentifier(id, dossierId),
+    onSuccess: ({ identifierNo }, id) => {
+      void qc.invalidateQueries({ queryKey: customsOpsKeys.all });
+      onPicked(identifierNo, id);
+    },
+    onError: (e) => {
+      toastMutationError(m.poolTakeFailed)(e);
+      void qc.invalidateQueries({ queryKey: customsOpsKeys.all });
+    },
+  });
+  const mine = (r: IdentifierListItem) => (r.request.taxCode === taxCode ? 0 : 1);
+  const items = [...(q.data?.items ?? [])].sort((a, b) => mine(a) - mine(b) || (a.identifiedOn ?? "").localeCompare(b.identifiedOn ?? ""));
+  const more = (q.data?.total ?? 0) - items.length;
+  return (
+    <Card aria-label={m.poolTitle}>
+      <Stack gap="sm" className="p-4">
+        <Stack gap="xs">
+          <span className="text-sm font-semibold">{m.poolTitle}</span>
+          <span className="text-sm text-fg-muted">{m.poolHint}</span>
+        </Stack>
+        {q.isError ? (
+          <LoadError title={m.poolLoadFailed} onRetry={() => void q.refetch()} />
+        ) : q.isPending ? (
+          <SkeletonCard lines={2} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<ListPlus />}
+            title={m.poolEmpty}
+            description={m.poolEmptyDesc}
+            action={
+              <Button asChild size="sm" variant="secondary">
+                <Link href="/customs/ops">{m.poolRegister}</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <ul className="divide-y divide-border">
+            {items.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2">
+                <span className="break-all font-mono text-sm font-semibold tabular-nums">{r.identifierNo}</span>
+                {r.expiresOn && <span className="text-sm text-fg-muted">{fill(m.poolExpires, { date: formatDate(r.expiresOn) })}</span>}
+                {r.expiringSoon && <Badge tone="warning" variant="outline">{m.poolExpiring}</Badge>}
+                <Button
+                  type="button" size="sm" variant="secondary" className="ml-auto" aria-label={fill(m.poolPickLabel, { no: r.identifierNo ?? "" })}
+                  disabled={take.isPending && take.variables !== r.id} loading={take.isPending && take.variables === r.id} onClick={() => take.mutate(r.id)}
+                >
+                  {m.poolPick}
+                </Button>
+                <span className="w-full break-words text-sm text-fg-muted">
+                  {fill(m.poolIssuedFor, { taxCode: r.request.taxCode, office: r.request.customsOffice })}
+                  {r.request.companyName ? ` · ${r.request.companyName}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {more > 0 && <span className="text-sm text-fg-muted">{fill(m.poolMore, { n: more })}</span>}
+      </Stack>
+    </Card>
+  );
+}
+
 type Props = {
   form: TransportOperationForm; kind: Kind; header: FormValues; dossierId: string; showInapplicable: boolean; text: { title: string; description: string }; onClose: () => void;
   /** Xác nhận số định danh đã cấp → điền vào ô số vận đơn của tờ khai. Không truyền (chỉ xem) → không có nút Xác nhận. */
-  onConfirm?: (identifierNo: string) => void;
+  onConfirm?: (identifierNo: string, takenId?: string) => void;
 };
 
 export function IdentifierDialog({ form, kind, header, dossierId, showInapplicable, text, onClose, onConfirm }: Props) {
@@ -187,8 +264,10 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
     setMissing([]);
     send.mutate(parsed.data);
   };
-  const confirm = (no: string) => {
-    onConfirm?.(no);
+  /** `takenId`: số chọn từ kho (đã giữ cho hồ sơ) – nơi điền ô dùng để trả lại số khi ô bị đổi trước khi Lưu. */
+  const confirm = (no: string, takenId?: string) => {
+    if (takenId) onConfirm?.(no, takenId);
+    else onConfirm?.(no);
     toast({ tone: "success", title: fill(m.confirmedToast, { no }), description: m.confirmedHint });
     onClose();
   };
@@ -228,6 +307,7 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
                 {"solution" in e && e.solution ? ` → ${e.solution}` : ""}
               </Alert>
             ))}
+          {onConfirm && <IdentifierPool dossierId={dossierId} taxCode={values[REQUEST_KEYS.taxCode] ?? ""} onPicked={confirm} />}
           {missing.length > 0 && <Alert tone="danger" title={m.missingTitle}>{fill(m.missing, { fields: missing.join(", ") })}</Alert>}
 
           {form.blocks.map((b) => (

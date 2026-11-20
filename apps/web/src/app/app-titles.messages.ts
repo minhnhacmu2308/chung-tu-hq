@@ -4,7 +4,7 @@
 import type { UiLocale } from "@kb/ui";
 
 type TitleKey =
-  | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "inbox" | "products" | "skills" | "teach" | "settings"
+  | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "customsOps" | "inbox" | "products" | "skills" | "teach" | "settings"
   | "login" | "register" | "acceptInvite" | "verifyEmail" | "forgotPassword" | "resetPassword" | "notFound";
 
 export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
@@ -16,6 +16,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "Hồ sơ khai báo",
     newDossier: "Tạo hồ sơ",
     customs: "Khai báo Hải quan",
+    customsOps: "Nghiệp vụ khác",
     inbox: "Hộp thư chứng từ",
     products: "Danh mục hàng hóa",
     skills: "Cách đọc chứng từ",
@@ -37,6 +38,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "Dossiers",
     newDossier: "New dossier",
     customs: "Customs filing",
+    customsOps: "Other operations",
     inbox: "Document inbox",
     products: "Product catalog",
     skills: "Document reading",
@@ -58,6 +60,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "申报档案",
     newDossier: "新建档案",
     customs: "海关申报",
+    customsOps: "其他业务",
     inbox: "单证收件箱",
     products: "商品目录",
     skills: "单证读取方式",
@@ -85,6 +88,7 @@ export function titleKeyForPath(pathname: string): AppTitleKey | undefined {
     "/dossiers": "dossiers",
     "/dossiers/new": "newDossier",
     "/customs": "customs",
+    "/customs/ops": "customsOps",
     "/inbox": "inbox",
     "/products": "products",
     "/skills": "skills",

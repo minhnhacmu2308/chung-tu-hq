@@ -8,13 +8,15 @@
 // Ctrl+S / Ctrl+Enter → lưu như Enter (ô đang gõ dở được chốt trước). Esc trên ô đã sửa → trả ô về giá trị cũ (lần nữa → đóng panel như thường).
 // F1 / nút "Phím tắt" → bảng phím tắt (panel-keys.ts).
 // Tab trong ô nhập → ô nhập kế tiếp của panel (bỏ qua nút TH / hướng dẫn). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
-import { Alert, Button, Checkbox, Dialog, RadioGroup, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Checkbox, Dialog, RadioGroup, DialogContent, DialogFooter, fill, toast, useMessages, useUiLocale } from "@kb/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, itemOverrides, OTHER_TAX_GROUPS, otherTaxIssues, otherTaxKeys, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
 } from "@kb/contracts";
 import { CheckCircle2, CopyCheck, Keyboard, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { customsOpsKeys, releaseIdentifier } from "@/api/customs-ops";
 import { formatNumber } from "@/lib/format";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { errorsForField, type FieldError } from "../dossier-detail/steps/customs-errors";
@@ -134,6 +136,28 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
       return current === vanningName ? c : { ...c, CON_VN: vanningName };
     });
   }, [changes, vanningName, savedVanningName, values]);
+  // Số định danh chọn từ kho (đã giữ cho hồ sơ): ô số vận đơn đổi khỏi số đó trước khi Lưu (sửa tay, Hủy, chọn số khác) → trả lại số.
+  // shortcut: rời trang khi chưa Lưu (panel unmount) không trả lại số – số vẫn giữ cho hồ sơ; cần thì trả lại ở màn Nghiệp vụ khác.
+  const qc = useQueryClient();
+  /** Trả lại số đã chọn mà không dùng nữa; lỗi → báo số vẫn đang giữ (trả lại ở /customs/ops). */
+  const giveBack = useCallback(
+    (id: string, no: string) =>
+      void releaseIdentifier(id, dossierId).then(
+        () => qc.invalidateQueries({ queryKey: customsOpsKeys.all }),
+        () => toast({ tone: "warning", title: fill(t.identifierReleaseFailed, { no }) }),
+      ),
+    [dossierId, qc, t.identifierReleaseFailed],
+  );
+  const [taken, setTaken] = useState<{ id: string; no: string; key: string; at: number } | null>(null);
+  const takenValue = taken ? (changes[taken.key] ?? values[taken.key] ?? "") : null;
+  useEffect(() => {
+    if (!taken || save.isPending) return;
+    // Đã Lưu sau khi chọn (phần đang sửa gồm cả ô này) → số thuộc tờ khai, thôi theo dõi.
+    if (save.isSuccess && save.submittedAt > taken.at) return setTaken(null);
+    if (takenValue === taken.no) return;
+    setTaken(null);
+    giveBack(taken.id, taken.no);
+  }, [taken, takenValue, save.isPending, save.isSuccess, save.submittedAt, giveBack]);
   const [confirm, setConfirm] = useState<{ next: PrintTarget | null; href?: string; leaving?: boolean } | null>(null);
   const [hsItem, setHsItem] = useState<LineItem | null>(null);
   // Vừa lưu bằng Enter → hỏi Thoát panel · Ở lại.
@@ -525,6 +549,11 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 busy={save.isPending}
                 onHs={setHsItem}
                 amending={mode === "AMEND"}
+                onIdentifierTaken={(tk) => {
+                  // Chọn số khác khi đang giữ số trước: trả lại số trước ngay (effect chỉ thấy số mới).
+                  if (taken && taken.id !== tk.id) giveBack(taken.id, taken.no);
+                  setTaken({ ...tk, at: Date.now() });
+                }}
               />
               </CodeValidityContext.Provider>
               {spread.lines > 0 && (

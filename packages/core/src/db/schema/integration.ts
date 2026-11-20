@@ -277,12 +277,18 @@ export const customsIdentifiers = pgTable(
   {
     id: id(),
     orgId: orgId(),
-    dossierId: text("dossier_id")
-      .notNull()
-      .references(() => dossiers.id, { onDelete: "cascade" }),
+    /** null = số xin theo lô, chưa gắn hồ sơ (menu Nghiệp vụ khác). */
+    dossierId: text("dossier_id").references(() => dossiers.id, { onDelete: "cascade" }),
     attempt: integer("attempt").notNull(),
     status: text("status").notNull().default("SENDING"),
     request: jsonb("request").notNull(),
+    batchId: text("batch_id"),
+    batchIndex: integer("batch_index"),
+    /** Hồ sơ đã dùng số này (một số chỉ dùng một lần); hồ sơ bị xóa → bỏ gắn, số vẫn còn dòng. */
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    usedByDossierId: text("used_by_dossier_id").references(() => dossiers.id, { onDelete: "set null" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: text("deleted_by"),
     refId: text("ref_id"),
     receiptNo: text("receipt_no"),
     receiptDate: date("receipt_date", { mode: "string" }),
@@ -298,9 +304,12 @@ export const customsIdentifiers = pgTable(
     ...timestamps(),
   },
   (t) => [
-    uniqueIndex("customs_identifiers_dossier_attempt_uq").on(t.dossierId, t.attempt),
+    uniqueIndex("customs_identifiers_dossier_attempt_uq").on(t.dossierId, t.attempt).where(sql`${t.deletedAt} is null`),
+    uniqueIndex("customs_identifiers_batch_uq").on(t.orgId, t.batchId, t.batchIndex).where(sql`${t.batchId} is not null`),
+    index("customs_identifiers_org_sent_idx").on(t.orgId, t.sentAt),
+    check("customs_identifiers_batch_chk", sql`(batch_id is null) = (batch_index is null)`),
     // Một lần gửi đang chờ mỗi hồ sơ: bấm Gửi hai lần song song không tạo hai lời gọi Hải quan.
-    uniqueIndex("customs_identifiers_sending_uq").on(t.dossierId).where(sql`${t.status} = 'SENDING'`),
+    uniqueIndex("customs_identifiers_sending_uq").on(t.dossierId).where(sql`${t.status} = 'SENDING' and ${t.deletedAt} is null`),
     index("customs_identifiers_org_dossier_idx").on(t.orgId, t.dossierId),
     check("customs_identifiers_status_chk", sql`status in ('SENDING', 'ACCEPTED', 'REJECTED', 'NO_RESPONSE')`),
     orgRls("customs_identifiers_rls"),

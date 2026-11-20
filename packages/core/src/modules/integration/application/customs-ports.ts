@@ -1,6 +1,6 @@
 import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, IdentifierRequest, IdentifierStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
+import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, IdentifierListQuery, IdentifierRequest, IdentifierStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -44,9 +44,13 @@ export type KvgsSheetRecord = {
 
 /** Khai báo định danh hàng hóa (V5IdentifierReq/Res); mỗi lần gửi một dòng (attempt) theo hồ sơ. Ngày YYYY-MM-DD; thời điểm là Date (UTC). */
 export type IdentifierRow = {
-  id: string; orgId: string; dossierId: string; attempt: number; status: IdentifierStatus; request: IdentifierRequest; refId: string | null; receiptNo: string | null; receiptDate: string | null;
+  id: string; orgId: string; /** null = số xin theo lô, chưa gắn hồ sơ. */ dossierId: string | null; attempt: number; status: IdentifierStatus; request: IdentifierRequest; refId: string | null; receiptNo: string | null; receiptDate: string | null;
   customsState: string | null; identifierNo: string | null; identifiedOn: string | null; qrPng: string | null; resultText: string | null; errors: GatewayError[] | null;
-  /** Số lần worker đã gọi cổng gửi khai báo. */ sendAttempts: number; sentBy: string; sentAt: Date; createdAt: Date; updatedAt: Date;
+  /** Số lần worker đã gọi cổng gửi khai báo. */ sendAttempts: number; sentBy: string; sentAt: Date;
+  /** Lô xin số (cùng một lần bấm) và thứ tự trong lô; cả hai null khi gửi theo hồ sơ. */ batchId: string | null; batchIndex: number | null;
+  /** Hồ sơ đã dùng số này (một lần); xóa hồ sơ → usedByDossierId null. */ usedAt: Date | null; usedByDossierId: string | null;
+  /** Xóa mềm: dòng lỗi/không phản hồi chưa có số. */ deletedAt: Date | null; deletedBy: string | null;
+  createdAt: Date; updatedAt: Date;
 };
 
 export interface CustomsRepos {
@@ -146,7 +150,24 @@ export interface CustomsRepos {
     /** Lần gửi còn SENDING mà không đổi gì từ trước `before` (job identifier-send / identifier-poll có thể đã mất) – cho stuck-sweeper. */
     listStuckSending(orgId: string, before: Date): Promise<IdentifierRow[]>;
     insert(row: IdentifierRow): Promise<void>;
-    update(orgId: string, id: string, patch: Partial<Omit<IdentifierRow, "id" | "orgId" | "dossierId" | "attempt" | "createdAt">>): Promise<void>;
+    /** Một câu insert cho cả lô (hoặc tất cả hoặc không dòng nào). */
+    insertMany(rows: IdentifierRow[]): Promise<void>;
+    listByBatch(orgId: string, batchId: string): Promise<IdentifierRow[]>;
+    /**
+     * Danh sách theo bộ lọc (kho số theo lô: chỉ dòng dossier_id null), bỏ dòng đã xóa mềm, sắp sent_at giảm dần rồi batch_index tăng dần. `status` = trạng thái hiển thị; `from`/`to` lọc theo ngày gửi (giờ VN);
+     * `q` khớp số định danh, số tiếp nhận, hồ sơ đã dùng. `expiringCount` = số còn dùng được mà hết hạn (31/12 năm cấp) trong 30 ngày kể từ `today` (theo cùng bộ lọc).
+     */
+    list(orgId: string, q: IdentifierListQuery, today: string): Promise<{ items: IdentifierRow[]; total: number; expiringCount: number }>;
+    /** Đánh dấu hồ sơ dùng số: chỉ dòng theo lô (dossier_id null) chưa dùng, ACCEPTED, chưa xóa. false = đã có người dùng/không hợp lệ. */
+    markUsed(orgId: string, id: string, dossierId: string, now: Date): Promise<boolean>;
+    /** Trả lại số: chỉ khi đang do `dossierId` giữ. */
+    release(orgId: string, id: string, dossierId: string, now: Date): Promise<boolean>;
+    /** Xóa mềm các dòng theo lô (dossier_id null) REJECTED/NO_RESPONSE chưa có số; trả id thực sự xóa (dòng đã đổi trạng thái bị bỏ qua). */
+    softDelete(orgId: string, ids: string[], by: string, now: Date): Promise<string[]>;
+    /** Gửi lại: ghi patch chỉ khi dòng còn REJECTED/NO_RESPONSE, chưa xóa, chưa có số (xóa cùng lúc không bị hồi sinh). false = không ghi. */
+    retry(orgId: string, id: string, patch: Partial<Omit<IdentifierRow, "id" | "orgId" | "dossierId" | "createdAt">>): Promise<boolean>;
+    /** `attempt` đổi được: gửi lại một dòng lô (retryIdentifier) tăng attempt trên chính dòng đó. */
+    update(orgId: string, id: string, patch: Partial<Omit<IdentifierRow, "id" | "orgId" | "dossierId" | "createdAt">>): Promise<void>;
   };
 }
 

@@ -127,6 +127,8 @@ export const REASON_TEXT_VI = {
   KVGS_ALREADY_SENDING: "Đang gửi tới Hải quan – chờ kết quả rồi thử lại",
   KVGS_RESPONSE_INCOMPLETE: "Phản hồi của Hải quan thiếu thông tin để in (số quản lý hàng hóa hoặc danh sách container)",
   CONT_LIST_LOCKED: "Danh sách container đã gửi – không sửa được, tạo lần khai mới để sửa",
+  IDENTIFIER_EXPIRED: "Số định danh đã hết hạn (dùng đến hết 31/12 năm cấp) – chọn số khác",
+  IDENTIFIER_TAKEN: "Số định danh đã được hồ sơ khác dùng – chọn số khác",
   CATALOG_CODE_TAKEN: "Mã này đã gán cho mặt hàng khác trong bộ mã",
   CATALOG_UNIT_FACTOR_REQUIRED: "ĐVT khác đơn vị gốc của mặt hàng – nhập hệ số quy đổi trước khi xác nhận",
   CATALOG_QUEUE_ITEM_DONE: "Mục chờ ghép này đã được xử lý",

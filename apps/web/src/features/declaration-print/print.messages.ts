@@ -4,6 +4,7 @@ import { defineMessages } from "@kb/ui";
 export const PRINT_MESSAGES = defineMessages({
   vi: {
     fillPrevFirst: "Nhập ô {n} trước – chỉ tiêu này nhập theo thứ tự",
+    identifierReleaseFailed: "Chưa trả lại được số định danh {no} – số vẫn đang giữ cho hồ sơ này, trả lại ở màn Nghiệp vụ khác",
     sheetPick: "Chọn tờ khai",
     sheetOption: "Tờ {no}/{of} · dòng {from}–{to}",
     sheetIssues: " việc cần xử lý",
@@ -117,6 +118,7 @@ export const PRINT_MESSAGES = defineMessages({
     codeBlocked: "Có mã không nằm trong danh mục (ô viền đỏ) – sửa lại mới lưu được.",
   },
   en: {
+    identifierReleaseFailed: "Could not return identifier {no} – it is still held for this dossier; return it on the Other operations screen",
     fillPrevFirst: "Fill box {n} first – this field is entered in order",
     sheetPick: "Select declaration sheet",
     sheetOption: "Sheet {no}/{of} · lines {from}–{to}",
@@ -231,6 +233,7 @@ export const PRINT_MESSAGES = defineMessages({
     codeBlocked: "Some codes are not in the code list (red fields) – fix them before saving.",
   },
   zh: {
+    identifierReleaseFailed: "未能退回识别号 {no}——该号码仍为本档案保留，请在“其他业务”页面退回",
     fillPrevFirst: "请先填写第 {n} 格 – 本栏须按顺序填写",
     sheetPick: "选择报关单分单",
     sheetOption: "第 {no}/{of} 份 · 第 {from}–{to} 行",

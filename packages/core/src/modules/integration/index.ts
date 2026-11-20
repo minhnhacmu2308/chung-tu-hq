@@ -35,4 +35,5 @@ export { requestKvgsFetch } from "./application/kvgs-fetch.js";
 export { prefillDocOf } from "./application/container-sources.js";
 export { prefillContainerRows, type PrefillDoc } from "./domain/container-prefill.js";
 export { KVGS_MAX_POLLS, KVGS_POLL_DELAY_MS, markKvgsPollFailed, pollKvgs, pollKvgsNow, KvgsKindSchema, type KvgsPollInput, type KvgsPollKind } from "./application/poll-kvgs.js";
-export { getIdentifier, IDENTIFIER_MAX_POLLS, IDENTIFIER_POLL_DELAY_MS, markIdentifierFailed, pollIdentifier, pollIdentifierNow, processIdentifier, requeueStuckIdentifiers, sendIdentifier, STUCK_IDENTIFIER_MS, type IdentifierPollInput, type IdentifierSendInput } from "./application/identifier.js";
+export { getIdentifier, IDENTIFIER_MAX_POLLS, IDENTIFIER_POLL_DELAY_MS, identifierSendJobId, markIdentifierFailed, pollIdentifier, pollIdentifierNow, processIdentifier, requeueStuckIdentifiers, sendIdentifier, STUCK_IDENTIFIER_MS, type IdentifierBatchDoneInput, type IdentifierPollInput, type IdentifierSendInput } from "./application/identifier.js";
+export { deleteIdentifiers, listIdentifiers, notifyIdentifierBatchDone, pollIdentifierById, releaseIdentifier, requestIdentifierBatch, retryIdentifier, useIdentifier } from "./application/identifier-batch.js";

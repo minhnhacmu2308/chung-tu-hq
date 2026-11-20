@@ -1,5 +1,5 @@
 import { IdentifierRequestSchema, KvgsSheetSchema } from "@kb/contracts";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { containerLists, customsIdentifiers, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
 import { drizzleFieldAudit } from "../../../db/field-audit.js";
@@ -165,7 +165,7 @@ function repos(tx: Tx): CustomsRepos {
     fieldAudit: drizzleFieldAudit(tx),
     identifiers: {
       latest: async (orgId, dossierId) => {
-        const r = (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.dossierId, dossierId))).orderBy(desc(customsIdentifiers.attempt)).limit(1))[0];
+        const r = (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.dossierId, dossierId), isNull(customsIdentifiers.deletedAt))).orderBy(desc(customsIdentifiers.attempt)).limit(1))[0];
         return r ? toIdentifier(r) : null;
       },
       get: async (orgId, id) => {
@@ -173,8 +173,45 @@ function repos(tx: Tx): CustomsRepos {
         return r ? toIdentifier(r) : null;
       },
       listStuckSending: async (orgId, before) =>
-        (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.status, "SENDING"), lt(customsIdentifiers.updatedAt, before)))).map(toIdentifier),
+        (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.status, "SENDING"), isNull(customsIdentifiers.deletedAt), lt(customsIdentifiers.updatedAt, before)))).map(toIdentifier),
       insert: async (row) => void (await tx.insert(customsIdentifiers).values(row)),
+      insertMany: async (rows) => {
+        if (rows.length) await tx.insert(customsIdentifiers).values(rows);
+      },
+      listByBatch: async (orgId, batchId) => (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.batchId, batchId))).orderBy(asc(customsIdentifiers.batchIndex))).map(toIdentifier),
+      list: async (orgId, q, today) => {
+        const c = customsIdentifiers;
+        const year = today.slice(0, 4);
+        // Dịch displayStatus ra SQL: ACCEPTED tách theo đã dùng / năm cấp so với năm hiện tại (hết hạn 31/12 năm cấp).
+        const accepted = and(eq(c.status, "ACCEPTED"), isNull(c.usedAt));
+        const fresh = or(isNull(c.identifiedOn), gte(c.identifiedOn, `${year}-01-01`));
+        const statusCond = q.status === "AVAILABLE" ? and(accepted, fresh) : q.status === "EXPIRED" ? and(accepted, lt(c.identifiedOn, `${year}-01-01`)) : q.status === "USED" ? and(eq(c.status, "ACCEPTED"), isNotNull(c.usedAt)) : q.status ? eq(c.status, q.status) : undefined;
+        const vnDay = sql`(${c.sentAt} at time zone 'Asia/Ho_Chi_Minh')::date`;
+        const like = q.q ? `%${q.q.replace(/[\\%_]/g, "\\$&")}%` : null;
+        const where = and(
+          // Kho số theo lô: bỏ dòng gửi từ hồ sơ (dossier_id có giá trị) – số đó đã nằm trong hồ sơ ấy.
+          eq(c.orgId, orgId), isNull(c.dossierId), isNull(c.deletedAt), statusCond,
+          q.from ? sql`${vnDay} >= ${q.from}::date` : undefined, q.to ? sql`${vnDay} <= ${q.to}::date` : undefined,
+          q.customsOffice ? sql`${c.request}->>'customsOffice' = ${q.customsOffice}` : undefined, q.batchId ? eq(c.batchId, q.batchId) : undefined,
+          like ? or(ilike(c.identifierNo, like), ilike(c.receiptNo, like), ilike(c.usedByDossierId, like)) : undefined,
+        );
+        const items = (await tx.select().from(c).where(where).orderBy(desc(c.sentAt), asc(c.batchIndex), asc(c.id)).limit(q.limit).offset(q.offset)).map(toIdentifier);
+        const total = (await tx.select({ n: count() }).from(c).where(where))[0]?.n ?? 0;
+        // Sắp hết hạn: còn dùng được, cấp năm nay, và hôm nay đã từ 01/12 (còn ≤ 30 ngày tới 31/12) – khớp isExpiringSoon.
+        // Mốc "từ YYYY-12-01" chỉ đúng vì hạn luôn là 31/12: đổi isExpiringSoon thì đổi cùng lúc ở đây và repo in-memory.
+        const expiringCount = today >= `${year}-12-01` ? (await tx.select({ n: count() }).from(c).where(and(where, accepted, gte(c.identifiedOn, `${year}-01-01`), lte(c.identifiedOn, `${year}-12-31`))))[0]?.n ?? 0 : 0;
+        return { items, total, expiringCount };
+      },
+      markUsed: async (orgId, id, dossierId, now) =>
+        (await tx.update(customsIdentifiers).set({ usedAt: now, usedByDossierId: dossierId, updatedAt: now }).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id), isNull(customsIdentifiers.dossierId), isNull(customsIdentifiers.usedAt), eq(customsIdentifiers.status, "ACCEPTED"), isNull(customsIdentifiers.deletedAt))).returning({ id: customsIdentifiers.id })).length === 1,
+      release: async (orgId, id, dossierId, now) =>
+        (await tx.update(customsIdentifiers).set({ usedAt: null, usedByDossierId: null, updatedAt: now }).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id), eq(customsIdentifiers.usedByDossierId, dossierId))).returning({ id: customsIdentifiers.id })).length === 1,
+      softDelete: async (orgId, ids, by, now) =>
+        ids.length
+          ? (await tx.update(customsIdentifiers).set({ deletedAt: now, deletedBy: by, updatedAt: now }).where(and(eq(customsIdentifiers.orgId, orgId), inArray(customsIdentifiers.id, ids), isNull(customsIdentifiers.dossierId), inArray(customsIdentifiers.status, ["REJECTED", "NO_RESPONSE"]), isNull(customsIdentifiers.identifierNo), isNull(customsIdentifiers.deletedAt))).returning({ id: customsIdentifiers.id })).map((r) => r.id)
+          : [],
+      retry: async (orgId, id, patch) =>
+        (await tx.update(customsIdentifiers).set(patch).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id), inArray(customsIdentifiers.status, ["REJECTED", "NO_RESPONSE"]), isNull(customsIdentifiers.deletedAt), isNull(customsIdentifiers.identifierNo), isNull(customsIdentifiers.dossierId))).returning({ id: customsIdentifiers.id })).length === 1,
       update: async (orgId, id, patch) => void (await tx.update(customsIdentifiers).set(patch).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id)))),
     },
   };

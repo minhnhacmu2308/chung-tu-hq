@@ -349,6 +349,7 @@ describe("DrizzleCustomsUow – khai báo định danh", () => {
   const ident = (id: string, attempt: number, p: Partial<IdentifierRow> = {}): IdentifierRow => ({
     id, orgId: "org_anphat", dossierId: "dos_idn", attempt, status: "SENDING", request: { objectType: "1", goodsType: "1", customsOffice: "03CE", taxCode: "0316789012", companyName: "AN PHÁT" },
     refId: null, receiptNo: null, receiptDate: null, customsState: null, identifierNo: null, identifiedOn: null, qrPng: null, resultText: null, errors: null, sendAttempts: 0, sentBy: "usr_chau",
+    batchId: null, batchIndex: null, usedAt: null, usedByDossierId: null, deletedAt: null, deletedBy: null,
     sentAt: new Date(now.getTime() + attempt * 1000), createdAt: now, updatedAt: now, ...p,
   });
   beforeAll(async () => {
@@ -378,6 +379,98 @@ describe("DrizzleCustomsUow – khai báo định danh", () => {
     expect((await uow.asOrg(A, (r) => r.identifiers.listStuckSending("org_anphat", new Date(now.getTime() + 1000)))).map((x) => x.id)).toEqual(["idn_s1"]);
     expect(await uow.asOrg(A, (r) => r.identifiers.listStuckSending("org_anphat", now))).toEqual([]);
     expect(await uow.asOrg(B, (r) => r.identifiers.listStuckSending("org_anphat", new Date(now.getTime() + 1000)))).toEqual([]);
+  });
+});
+
+describe("DrizzleCustomsUow – định danh theo lô (không gắn hồ sơ)", () => {
+  const TODAY = "2026-12-05";
+  const bi = (id: string, batchId: string, idx: number, p: Partial<IdentifierRow> = {}): IdentifierRow => ({
+    id, orgId: "org_anphat", dossierId: null, attempt: 1, status: "ACCEPTED", request: { objectType: "1", goodsType: "1", customsOffice: "03CE", taxCode: "0316789012", companyName: "AN PHÁT" },
+    refId: null, receiptNo: null, receiptDate: null, customsState: "15", identifierNo: `NO-${id}`, identifiedOn: "2026-11-15", qrPng: null, resultText: null, errors: null, sendAttempts: 1, sentBy: "usr_chau",
+    batchId, batchIndex: idx, usedAt: null, usedByDossierId: null, deletedAt: null, deletedBy: null, sentAt: new Date(now.getTime() + idx * 1000), createdAt: now, updatedAt: now, ...p,
+  });
+  const q = (batchId: string, extra: Record<string, unknown> = {}) => ({ limit: 50, offset: 0, batchId, ...extra }) as Parameters<CustomsReposList>[1];
+  type CustomsReposList = import("../application/customs-ports.js").CustomsRepos["identifiers"]["list"];
+  const idsOf = async (batchId: string, extra: Record<string, unknown> = {}) => (await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", q(batchId, extra), TODAY))).items.map((x) => x.id);
+
+  it("insertMany_and_list_filters_by_display_status", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([
+      bi("b1_avail", "bat1", 1),
+      bi("b1_old", "bat1", 2, { identifiedOn: "2025-06-01" }),
+      bi("b1_used", "bat1", 3, { usedAt: now, usedByDossierId: "dos_idn" }),
+      bi("b1_rej", "bat1", 4, { status: "REJECTED", identifierNo: null, identifiedOn: null }),
+    ]));
+    expect((await uow.asOrg(A, (r) => r.identifiers.listByBatch("org_anphat", "bat1"))).map((x) => x.id)).toEqual(["b1_avail", "b1_old", "b1_used", "b1_rej"]);
+    expect(await idsOf("bat1", { status: "AVAILABLE" })).toEqual(["b1_avail"]);
+    expect(await idsOf("bat1", { status: "EXPIRED" })).toEqual(["b1_old"]);
+    expect(await idsOf("bat1", { status: "USED" })).toEqual(["b1_used"]);
+    expect(await idsOf("bat1", { status: "REJECTED" })).toEqual(["b1_rej"]);
+    const all = await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", q("bat1"), TODAY));
+    expect([all.total, all.expiringCount]).toEqual([4, 1]);
+    expect((await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", q("bat1"), "2026-11-20"))).expiringCount).toBe(0);
+    expect(await idsOf("bat1", { q: "NO-b1_used" })).toEqual(["b1_used"]);
+    expect(await idsOf("bat1", { q: "dos_idn" })).toEqual(["b1_used"]);
+    expect(await idsOf("bat1", { customsOffice: "99XX" })).toEqual([]);
+  });
+  it("batch_uq_rejects_duplicate_batch_index", async () => {
+    await expect(uow.asOrg(A, (r) => r.identifiers.insertMany([bi("b2_a", "bat2", 1), bi("b2_b", "bat2", 1)]))).rejects.toThrow();
+  });
+  it("markUsed_second_caller_gets_false", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([bi("b3_a", "bat3", 1)]));
+    expect(await uow.asOrg(A, (r) => r.identifiers.markUsed("org_anphat", "b3_a", "dos_idn", now))).toBe(true);
+    expect(await uow.asOrg(A, (r) => r.identifiers.markUsed("org_anphat", "b3_a", "dos_idn", now))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.identifiers.release("org_anphat", "b3_a", "dos_idn", now))).toBe(true);
+    expect(await uow.asOrg(A, (r) => r.identifiers.markUsed("org_anphat", "b3_a", "dos_idn", now))).toBe(true);
+  });
+  it("softDelete_skips_row_that_became_accepted", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([bi("b4_rej", "bat4", 1, { status: "REJECTED", identifierNo: null, identifiedOn: null }), bi("b4_ok", "bat4", 2)]));
+    expect(await uow.asOrg(A, (r) => r.identifiers.softDelete("org_anphat", ["b4_rej", "b4_ok"], "usr_chau", now))).toEqual(["b4_rej"]);
+    expect(await idsOf("bat4")).toEqual(["b4_ok"]);
+    expect(await uow.asOrg(A, (r) => r.identifiers.softDelete("org_anphat", ["b4_rej"], "usr_chau", now))).toEqual([]);
+  });
+  it("list_excludes_other_org", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([bi("b5_a", "bat5", 1)]));
+    const other = await uow.asOrg(B, (r) => r.identifiers.list("org_anphat", q("bat5"), TODAY));
+    expect([other.items.length, other.total]).toEqual([0, 0]);
+    expect(await uow.asOrg(B, (r) => r.identifiers.listByBatch("org_anphat", "bat5"))).toEqual([]);
+    expect(await uow.asOrg(B, (r) => r.identifiers.markUsed("org_anphat", "b5_a", "dos_idn", now))).toBe(false);
+    expect(await uow.asOrg(B, (r) => r.identifiers.softDelete("org_anphat", ["b5_a"], "usr_khac", now))).toEqual([]);
+  });
+  it("dossier_bound_rows_not_in_pool", async () => {
+    // Dòng gửi từ panel Khai báo định danh của hồ sơ: số đã nằm trong hồ sơ đó – không vào kho, không hồ sơ khác lấy, không xóa từ kho.
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([
+      bi("b7_dos_ok", "bat7", 1, { dossierId: "dos_idn", batchId: null, batchIndex: null, attempt: 30, identifiedOn: "2026-12-02" }),
+      bi("b7_dos_rej", "bat7", 2, { dossierId: "dos_idn", batchId: null, batchIndex: null, attempt: 31, status: "REJECTED", identifierNo: null, identifiedOn: null, errors: [{ code: "E", message: "x" }] }),
+    ]));
+    const page = await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", { limit: 200, offset: 0, q: "NO-b7" } as Parameters<CustomsReposList>[1], TODAY));
+    expect([page.items.length, page.total, page.expiringCount]).toEqual([0, 0, 0]);
+    const all = await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", { limit: 200, offset: 0 } as Parameters<CustomsReposList>[1], TODAY));
+    expect(all.items.map((x) => x.id)).not.toContain("b7_dos_rej");
+    expect(await uow.asOrg(A, (r) => r.identifiers.markUsed("org_anphat", "b7_dos_ok", "dos_idn", now))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.identifiers.softDelete("org_anphat", ["b7_dos_rej"], "usr_chau", now))).toEqual([]);
+    expect((await uow.asOrg(A, (r) => r.identifiers.get("org_anphat", "b7_dos_rej")))?.deletedAt).toBeNull();
+  });
+  it("retry_only_failed_live_row_without_number", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([
+      bi("b8_rej", "bat8", 1, { status: "REJECTED", identifierNo: null, identifiedOn: null }),
+      bi("b8_del", "bat8", 2, { status: "NO_RESPONSE", identifierNo: null, identifiedOn: null, deletedAt: now, deletedBy: "usr_chau" }),
+      bi("b8_ok", "bat8", 3),
+    ]));
+    const patch = { status: "SENDING", attempt: 2, updatedAt: now } as const;
+    expect(await uow.asOrg(A, (r) => r.identifiers.retry("org_anphat", "b8_rej", patch))).toBe(true);
+    expect(await uow.asOrg(A, (r) => r.identifiers.retry("org_anphat", "b8_rej", patch))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.identifiers.retry("org_anphat", "b8_del", patch))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.identifiers.retry("org_anphat", "b8_ok", patch))).toBe(false);
+    expect((await uow.asOrg(A, (r) => r.identifiers.get("org_anphat", "b8_del")))?.status).toBe("NO_RESPONSE");
+  });
+  it("deleted_dossier_sets_used_by_null", async () => {
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_idn_del', 'org_anphat', 'IDN-DEL', 'NK', 'A11', 'P', '03CE', '2026-11-01', 'usr_chau')`);
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([bi("b6_a", "bat6", 1, { usedAt: now, usedByDossierId: "dos_idn_del" })]));
+    await admin.execute(sql`DELETE FROM dossiers WHERE id = 'dos_idn_del'`);
+    await admin.close();
+    const got = await uow.asOrg(A, (r) => r.identifiers.get("org_anphat", "b6_a"));
+    expect(got?.usedByDossierId).toBeNull();
   });
 });
 

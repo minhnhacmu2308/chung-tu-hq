@@ -82,7 +82,17 @@ export type MockDb = {
   /** Qua khu vực giám sát: danh sách container đã khai và bảng kê KVGS đã lấy (theo hồ sơ + tờ). */
   kvgs: MockKvgs;
   /** Khai báo định danh hàng hóa (V5IdentifierReq/Res) – mỗi lần gửi một bản ghi theo hồ sơ; `doneAt` = lúc Hải quan (giả lập) trả lời. */
-  identifiers: (IdentifierRecord & { id: string; dossierId: string; doneAt: string })[];
+  identifiers: (IdentifierRecord & {
+    id: string;
+    /** null = dòng lô xin độc lập (màn Nghiệp vụ khác), không gắn hồ sơ. */
+    dossierId: string | null;
+    doneAt: string;
+    batchId?: string | null;
+    batchIndex?: number | null;
+    usedByDossierId?: string | null;
+    usedAt?: string | null;
+    deletedAt?: string | null;
+  })[];
   /** Back-office của bên vận hành (màn /admin). */
   admin: AdminDb;
   /** Gói & lượt (ADR 0011): sổ lượt, thanh toán PayOS giả, hợp đồng năm – của mọi doanh nghiệp. */

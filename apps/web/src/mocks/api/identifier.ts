@@ -23,10 +23,10 @@ const latestOf = (db: MockDb, dossierId: string): MockIdentifier | undefined =>
   (db.identifiers ?? []).filter((x) => x.dossierId === dossierId).sort((a, b) => b.attempt - a.attempt)[0];
 
 const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-const digits = (seed: string, n: number) => String(Array.from(seed).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 10 ** n, 7)).padStart(n, "0");
+export const digits = (seed: string, n: number) => String(Array.from(seed).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 10 ** n, 7)).padStart(n, "0");
 
 /** Chốt kết quả của bản đang chờ (giống phản hồi V5IdentifierReq thật: số định danh, QR, câu kết quả). */
-function settle(x: MockIdentifier, now: number, force = false) {
+export function settle(x: MockIdentifier, now: number, force = false) {
   if (x.status !== "SENDING" || (!force && Date.parse(x.doneAt) > now)) return;
   const day = new Date(now + 7 * 3_600_000).toISOString().slice(0, 10);
   const receipt = { receiptNo: x.receiptNo ?? `1192${digits(x.id, 8)}`, receiptDate: x.receiptDate ?? day };

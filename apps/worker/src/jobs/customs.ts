@@ -1,4 +1,4 @@
-import { KvgsKindSchema, pollIdentifier, pollKvgs, pollStatus, processIdentifier, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
+import { KvgsKindSchema, notifyIdentifierBatchDone, pollIdentifier, pollKvgs, pollStatus, processIdentifier, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
 import { createLogger } from "@kb/core/shared";
 import { z } from "zod";
 import { parsePayload } from "./_payload.js";
@@ -36,8 +36,8 @@ export async function kvgsPollJob(deps: CustomsDeps, raw: unknown) {
   return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
 }
 
-/** Payload job identifier-send / identifier-poll: `id` = bản ghi khai báo định danh, `n` = lần hỏi thứ n. */
-export const IdentifierSendPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), id: z.string().min(1) });
+/** Payload job identifier-send / identifier-poll: `id` = bản ghi khai báo định danh, `attempt` = lần gửi tạo job (job xếp trước khi có trường này: vắng), `n` = lần hỏi thứ n. */
+export const IdentifierSendPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), id: z.string().min(1), attempt: z.number().int().positive().optional() });
 export const IdentifierPollPayload = IdentifierSendPayload.extend({ n: z.number().int().positive() });
 
 /** Gửi khai báo định danh (V5IdentifierReq). Lỗi tạm ném ra để BullMQ retry; lỗi Hải quan / chưa cấu hình ghi vào bản ghi, không retry. */
@@ -54,4 +54,14 @@ export async function identifierPollJob(deps: CustomsDeps, raw: unknown) {
   const r = await pollIdentifier(deps, p);
   if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "identifier-poll", id: p.id, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
+}
+
+/** Payload job identifier-batch-done: lô số định danh vừa xong hết. */
+export const IdentifierBatchDonePayload = z.object({ orgId: z.string().min(1), batchId: z.string().min(1) });
+
+/** Báo người xin lô số định danh khi lô xong (jobId theo lô + attempt lớn nhất chống báo trùng). */
+export async function identifierBatchDoneJob(deps: CustomsDeps, raw: unknown) {
+  const p = parsePayload(IdentifierBatchDonePayload, raw, "identifier-batch-done");
+  await notifyIdentifierBatchDone(deps, p);
+  return "done";
 }

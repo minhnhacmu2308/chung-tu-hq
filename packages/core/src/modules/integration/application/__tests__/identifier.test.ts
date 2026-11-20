@@ -33,7 +33,7 @@ describe("sendIdentifier – gửi khai báo định danh", () => {
     const res = await sendIdentifier(h.deps, declarant, D, REQ);
     expect(res).toMatchObject({ ok: true, value: { dossierId: D, latest: { attempt: 1, status: "SENDING", request: REQ, identifierNo: null } } });
     expect(h.uow.data.identifiers).toHaveLength(1);
-    expect(job()).toMatchObject({ name: "identifier-send", jobId: `identifier-send:${h.uow.data.identifiers[0]!.id}`, payload: { orgId: ORG, userId: "usr_chau" } });
+    expect(job()).toMatchObject({ name: "identifier-send", jobId: `identifier-send:${h.uow.data.identifiers[0]!.id}:1`, payload: { orgId: ORG, userId: "usr_chau" } });
     expect(h.dossiers.events).toContainEqual({ type: "customs.message" });
   });
   it("đang chờ kết quả → KVGS_ALREADY_SENDING, không tạo lần gửi thứ hai", async () => {
@@ -108,7 +108,7 @@ describe("processIdentifier – worker identifier-send", () => {
     await processIdentifier(h.deps, send.payload as Parameters<typeof processIdentifier>[1]);
     await processIdentifier(h.deps, send.payload as Parameters<typeof processIdentifier>[1]);
     expect(g.identifierCalls).toHaveLength(1);
-    expect(h.queue.jobs.filter((j) => j.name === "identifier-poll").map((j) => j.jobId)).toEqual([`identifier-poll:${h.uow.data.identifiers[0]!.id}:1`, `identifier-poll:${h.uow.data.identifiers[0]!.id}:1`]);
+    expect(h.queue.jobs.filter((j) => j.name === "identifier-poll").map((j) => j.jobId)).toEqual([`identifier-poll:${h.uow.data.identifiers[0]!.id}:1:1`, `identifier-poll:${h.uow.data.identifiers[0]!.id}:1:1`]);
   });
   it("chưa cấu hình (DomainError) → REJECTED, không tính phí; lỗi tạm → ném để retry", async () => {
     const g = gw({});
@@ -149,7 +149,7 @@ describe("requeueStuckIdentifiers – stuck-sweeper", () => {
     h.queue.jobs.length = 0;
     expect(await requeueStuckIdentifiers(h.deps, { orgId: ORG, now: later(STUCK_IDENTIFIER_MS - 1000) })).toEqual({ requeued: [], noResponse: [] });
     expect(await requeueStuckIdentifiers(h.deps, { orgId: ORG, now: later(STUCK_IDENTIFIER_MS + 1000) })).toEqual({ requeued: [id], noResponse: [] });
-    expect(h.queue.jobs).toEqual([expect.objectContaining({ name: "identifier-send", jobId: `identifier-send:${id}`, payload: { orgId: ORG, userId: "usr_chau", id } })]);
+    expect(h.queue.jobs).toEqual([expect.objectContaining({ name: "identifier-send", jobId: `identifier-send:${id}:1`, payload: { orgId: ORG, userId: "usr_chau", id, attempt: 1 } })]);
     // Job đẩy lại chạy bình thường → có kết quả, không còn kẹt.
     gw({});
     await runSend();

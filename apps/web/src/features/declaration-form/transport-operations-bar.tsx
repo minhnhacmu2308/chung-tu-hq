@@ -63,7 +63,7 @@ function OperationDialog({ form, kind, header, showInapplicable, onClose }: { fo
  * Panel ô vận đơn của bản in (hồ sơ thật): gửi báo chưa kết nối nghiệp vụ với Hải quan.
  * `dossierId`: Khai báo định danh gửi Hải quan thật. `onIdentifier`: Xác nhận số định danh đã cấp → điền vào ô số vận đơn.
  */
-export function TransportOperationsBar({ kind, header, amending, showInapplicable, dossierId, onIdentifier }: { kind: Kind; header: FormValues; amending: boolean; showInapplicable: boolean; dossierId?: string; onIdentifier?: (identifierNo: string) => void }) {
+export function TransportOperationsBar({ kind, header, amending, showInapplicable, dossierId, onIdentifier }: { kind: Kind; header: FormValues; amending: boolean; showInapplicable: boolean; dossierId?: string; onIdentifier?: (identifierNo: string, takenId?: string) => void }) {
   const t = useMessages(FORM_MESSAGES);
   const [open, setOpen] = useState<TransportOperationForm["id"] | null>(null);
   const forms = operationsFor(kind, amending);

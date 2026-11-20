@@ -1,6 +1,7 @@
 // Khai báo định danh hàng hóa (FPT V5IdentifierReq / V5IdentifierRes, đặc tả KHAI BAO LAY MA DINH DANH v1.1): xin số định danh + mã QR
 // để đưa hàng qua khu vực giám sát. Gửi riêng, không nằm trong tờ khai; mỗi lần gửi một bản ghi (attempt) theo hồ sơ.
 import { z } from "zod";
+import { pageOf, PageQuerySchema } from "../api/page.js";
 import { IsoDateSchema, IsoDateTimeSchema } from "../common.js";
 import { CustomsErrorSchema } from "../dto/customs.js";
 
@@ -50,3 +51,45 @@ export type IdentifierRecord = z.infer<typeof IdentifierRecordSchema>;
 /** Màn Khai báo định danh của hồ sơ: lần gửi gần nhất (null = chưa gửi). */
 export const IdentifierViewSchema = z.object({ dossierId: z.string(), latest: IdentifierRecordSchema.nullable() });
 export type IdentifierView = z.infer<typeof IdentifierViewSchema>;
+
+/** Gửi xin số định danh theo lô: `count` bản ghi cùng nội dung; `clientKey` chống gửi lặp khi bấm lại. */
+export const IdentifierBatchRequestSchema = z.object({
+  clientKey: z.string().uuid(),
+  count: z.number().int().min(1).max(50),
+  request: IdentifierRequestSchema,
+});
+export type IdentifierBatchRequest = z.infer<typeof IdentifierBatchRequestSchema>;
+
+/** Trạng thái hiển thị ở danh sách: ACCEPTED tách thành AVAILABLE (còn dùng được) / USED / EXPIRED (hết hạn cuối năm cấp). */
+export const IdentifierDisplayStatusSchema = z.enum(["SENDING", "AVAILABLE", "USED", "EXPIRED", "REJECTED", "NO_RESPONSE"]);
+export type IdentifierDisplayStatus = z.infer<typeof IdentifierDisplayStatusSchema>;
+
+export const IdentifierListQuerySchema = PageQuerySchema.extend({
+  status: IdentifierDisplayStatusSchema.optional(),
+  from: IsoDateSchema.optional(),
+  to: IsoDateSchema.optional(),
+  customsOffice: z.string().optional(),
+  batchId: z.string().optional(),
+  q: z.string().trim().max(50).optional(),
+});
+export type IdentifierListQuery = z.infer<typeof IdentifierListQuerySchema>;
+
+export const IdentifierListItemSchema = IdentifierRecordSchema.extend({
+  id: z.string(),
+  batchId: z.string().nullable(),
+  batchIndex: z.number().int().nullable(),
+  dossierId: z.string().nullable(),
+  usedByDossierId: z.string().nullable(),
+  usedAt: IsoDateTimeSchema.nullable(),
+  expiresOn: IsoDateSchema.nullable(),
+  expiringSoon: z.boolean(),
+  displayStatus: IdentifierDisplayStatusSchema,
+});
+export type IdentifierListItem = z.infer<typeof IdentifierListItemSchema>;
+
+/** `expiringCount`: số định danh còn dùng được nhưng sắp hết hạn (toàn bộ theo bộ lọc, không chỉ trang hiện tại). */
+export const IdentifierListSchema = pageOf(IdentifierListItemSchema).extend({ expiringCount: z.number().int() });
+export type IdentifierList = z.infer<typeof IdentifierListSchema>;
+
+export const IdentifierDeleteSchema = z.object({ ids: z.array(z.string()).min(1).max(200) });
+export const IdentifierUseSchema = z.object({ dossierId: z.string().min(1) });

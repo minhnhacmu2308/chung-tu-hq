@@ -115,6 +115,12 @@ describe("Barcode type=png (ảnh mã do Hải quan cấp)", () => {
     expect(getByRole("img")).not.toHaveClass("bg-scan");
   });
 
+  it("cỡ xs (ô bảng): h-10, viền yên tĩnh mỏng khi scan", () => {
+    const { getByRole } = render(<Barcode type="png" value={TINY_PNG} label="p" size="xs" surface="scan" />);
+    expect(getByRole("img")).toHaveClass("h-10", "w-10", "p-0.5");
+    expect(getByRole("img")).not.toHaveClass("p-2");
+  });
+
   it("cỡ sm/lg theo token class", () => {
     const { getByRole, rerender } = render(<Barcode type="png" value={TINY_PNG} label="p" size="sm" />);
     expect(getByRole("img")).toHaveClass("h-24", "w-24");

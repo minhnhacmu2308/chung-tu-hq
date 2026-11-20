@@ -58,7 +58,15 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
       ],
     },
     { id: "inbox", label: t.navInbox, icon: <Inbox />, href: "/inbox", ...(mail ? { badge: mail } : {}) },
-    { id: "customs", label: t.navCustoms, icon: <Send />, href: "/customs" },
+    {
+      id: "customs",
+      label: t.navCustomsGroup,
+      icon: <Send />,
+      children: [
+        { id: "customs-declare", label: t.navCustoms, href: "/customs" },
+        { id: "customs-ops", label: t.navCustomsOps, href: "/customs/ops" },
+      ],
+    },
     { id: "products", label: t.navProducts, icon: <Package />, href: "/products" },
     { id: "skills", label: t.navSkills, icon: <Sparkles />, href: "/skills" },
     { id: "teach", label: t.navTeach, icon: <GraduationCap />, href: "/teach" },
@@ -72,7 +80,8 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
     const detailId = pathname.split("/")[2];
     const dir = params.get("direction") ?? dossiers?.find((d) => d.id === detailId)?.direction;
     activeId = dir === "NK" || dir === "XK" ? `dossiers-${dir}` : "dossiers-all";
-  } else activeId = items.find((i) => i.href && i.href !== "/" && pathname.startsWith(i.href))?.id;
+  } else if (pathname.startsWith("/customs")) activeId = pathname.startsWith("/customs/ops") ? "customs-ops" : "customs-declare";
+  else activeId = items.find((i) => i.href && i.href !== "/" && pathname.startsWith(i.href))?.id;
   return { items, activeId };
 }
 

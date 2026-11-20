@@ -85,7 +85,7 @@ endpoint, body, cách hỏi kết quả; chưa có thì ghi nhận tay.
 
 ## 8. Thứ tự làm (mỗi bước một PR)
 
-1. Màn danh sách + đăng ký số định danh theo lô (khai độc lập) + chọn số có sẵn ở ô 1.26/2.24. Bước này chỉ có một loại nên màn danh sách đọc thẳng
+1. **(Đã xong)** Màn danh sách + đăng ký số định danh theo lô (khai độc lập) + chọn số có sẵn ở ô 1.26/2.24. Bước này chỉ có một loại nên màn danh sách đọc thẳng
    `customs_identifiers`; chưa tạo `customs_ops` (tạo ở bước 2, khi có loại thứ hai, để không phải đồng bộ hai bảng cho cùng một loại).
 2. Bảng `customs_ops` + chia tách vận đơn (đã có API) + HYS khai độc lập.
 3. Ghi nhận tay: ngoài giờ (đưa lên bước 2 nếu FPT có API sớm), CFS, lệ phí CSHT; hiện KVGS + container trong danh sách chung.

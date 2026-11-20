@@ -314,6 +314,7 @@ export function Showcase() {
               <div className="flex flex-wrap items-center gap-4 text-fg">
                 <Barcode type="qr" value="KVGS-FBIU5802429" label="Mã QR bản kê" />
                 <Barcode type="code128" value="FBIU5802429" label="Mã vạch số container" />
+                <Barcode type="qr" size="xs" surface="scan" value="122600000000001" label="QR thu nhỏ trong ô bảng" />
                 <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã vạch Hải quan cấp" />
                 <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã QR định danh (nền quét)" surface="scan" />
               </div>

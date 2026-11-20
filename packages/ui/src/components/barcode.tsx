@@ -10,7 +10,8 @@ import { cn } from "../lib/cn.js";
 // svg giữ `preserveAspectRatio="xMidYMid meet"`, vùng yên tĩnh (quiet zone) nằm trong viewBox.
 
 export type BarcodeType = "qr" | "code128" | "png";
-export type BarcodeSize = "sm" | "md" | "lg";
+/** `xs`: mã thu nhỏ trong ô bảng (40px – để nhận ra, không để quét; quét dùng sm trở lên). */
+export type BarcodeSize = "xs" | "sm" | "md" | "lg";
 export type BarcodeSurface = "plain" | "scan";
 
 export interface BarcodeProps {
@@ -27,20 +28,23 @@ export interface BarcodeProps {
 
 // Code128: kích thước theo SỐ MODULE, không theo hộp cố định. 1 module = 2 đơn vị viewBox (bwip scale 2).
 // px/đơn vị viewBox: sm 0.75 (vạch hẹp 1,5px) · md 1 (2px) · lg 1,5 (3px). Cao cố định, không co theo bề rộng.
-const CODE128_PX_PER_UNIT: Record<BarcodeSize, number> = { sm: 0.75, md: 1, lg: 1.5 };
-const CODE128_HEIGHT_PX: Record<BarcodeSize, number> = { sm: 40, md: 56, lg: 80 };
+const CODE128_PX_PER_UNIT: Record<BarcodeSize, number> = { xs: 0.5, sm: 0.75, md: 1, lg: 1.5 };
+const CODE128_HEIGHT_PX: Record<BarcodeSize, number> = { xs: 24, sm: 40, md: 56, lg: 80 };
 
 const barcodeVariants = cva("inline-block shrink-0 max-w-none text-current", {
   variants: {
     type: { qr: "", code128: "", png: "object-contain [image-rendering:pixelated]" },
-    size: { sm: "", md: "", lg: "" },
+    size: { xs: "", sm: "", md: "", lg: "" },
     surface: { plain: "", scan: "rounded-sm bg-scan p-2 text-scan-fg" },
   },
   compoundVariants: [
+    { type: "qr", size: "xs", className: "h-10 w-10" },
     { type: "qr", size: "sm", className: "h-24 w-24" },
     { type: "qr", size: "md", className: "h-32 w-32" },
     { type: "qr", size: "lg", className: "h-48 w-48" },
+    { type: "png", size: "xs", className: "h-10 w-10" },
     { type: "png", size: "sm", className: "h-24 w-24" },
+    { size: "xs", surface: "scan", className: "p-0.5" },
     { type: "png", size: "md", className: "h-32 w-32" },
     { type: "png", size: "lg", className: "h-48 w-48" },
   ],

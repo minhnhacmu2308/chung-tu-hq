@@ -429,11 +429,17 @@ Xin **số định danh hàng hóa** (kèm mã QR) để đưa hàng qua khu v�
 - **Gửi**: ô khai (loại đối tượng, loại hàng, chi cục, MST + tên doanh nghiệp, đại lý, USER_ID – trống thì lấy tài khoản VNACCS của doanh nghiệp) điền sẵn từ tờ khai, lần sau điền lại từ lần gửi trước. Gửi tạo một dòng `customs_identifiers` SENDING (mỗi hồ sơ chỉ một lần gửi đang chờ) + job `identifier-send`; worker gọi `V5IdentifierReq` (body phẳng, không tài khoản VNACCS; cổng thật mất khoảng 45 giây).
 - **Kết quả**: FPT trả ngay số định danh + ngày + QR (`tranG_THAI` 15) → Hải quan chấp nhận. Mới tiếp nhận (`tranG_THAI` 11 – có REF_ID, số tiếp nhận, chưa có số định danh) → worker hỏi `V5IdentifierRes` (mã HQ, MST, tên DN, đại lý, REF_ID, USER_ID) mỗi 30 giây, tối đa 40 lần rồi "Hải quan chưa phản hồi"; panel nhắc "đã cấp số tiếp nhận – bấm Hỏi kết quả" và cho hỏi tay bất cứ lúc nào. `errorList` / `tranG_THAI` 10 → bị từ chối kèm lỗi, gửi lại được. Lỗi khi hỏi (phản hồi sai dạng, chưa cấu hình) không coi là từ chối – về "chưa phản hồi" để hỏi lại.
 - **Xác nhận**: khi đã có số định danh, nút Gửi khai báo đổi thành **Xác nhận** – điền số định danh vào ô số vận đơn đang mở (người khai bấm Lưu để ghi tờ khai).
+- **Đăng ký theo lô** (màn Nghiệp vụ khác `/customs/ops`, nút "Đăng ký số định danh"): một lần xin 1–50 số cùng nội dung khai, không gắn hồ sơ (`dossier_id` null, chung `batch_id`); bấm hai lần / gửi lại cùng `clientKey` trả lô đã có. Mỗi dòng là một job `identifier-send` riêng (concurrency 2), lô xong báo một thông báo. Dòng bị từ chối / không phản hồi: Gửi lại từng dòng hoặc **Xóa** (xóa mềm + `org_audit`; không xóa dòng đang gửi hoặc đã có số).
+- **Hạn dùng**: số dùng được tới hết **31/12 năm cấp** (so với ngày hôm nay giờ Việt Nam); từ 01/12 hiện nhãn "Sắp hết hạn", sang năm sau là Hết hạn.
+- **Chọn số có sẵn**: panel Khai báo định danh có khu "Chọn số có sẵn" – số AVAILABLE của doanh nghiệp (kèm hạn dùng, nhãn sắp hết hạn). Chọn → giữ số cho hồ sơ (`/customs/identifiers/:id/use`, hai hồ sơ cùng chọn thì một bên nhận `IDENTIFIER_TAKEN` và danh sách tải lại) rồi điền ô số vận đơn; người khai bấm Lưu để ghi tờ khai (`field_audit`). Ô bị đổi khỏi số đó trước khi Lưu (sửa tay, Hủy, chọn số khác) → trả lại số (`DELETE …/use`). Chưa có số → lối tới màn Nghiệp vụ khác.
 - **Kẹt**: job mất (Redis lỗi ngay sau khi ghi) → stuck-sweeper (mỗi 5 phút): SENDING không đổi quá 15 phút, chưa có REF_ID thì đẩy lại gửi, đã có REF_ID thì "chưa phản hồi".
 
-### 9.7 Nghiệp vụ khác (đang thiết kế, chưa code)
+### 9.7 Nghiệp vụ khác
 
-Menu **Nghiệp vụ khác** khai trước, theo dõi các nghiệp vụ phụ trợ thông quan; nghiệp vụ không bắt buộc gắn hồ sơ (ADR 0020). Mỗi loại được phân loại **cần / không cần số tờ khai** trước khi làm. Đặc tả: `docs/superpowers/specs/2026-11-20-nghiep-vu-khac-design.md`; quy tắc thêm loại mới: `.claude/rules/nghiep-vu-khac.md`. Mục 9.4–9.6 mô tả luồng hiện tại (gắn hồ sơ) cho tới khi làm xong.
+Menu **Nghiệp vụ khác** khai trước, theo dõi các nghiệp vụ phụ trợ thông quan; nghiệp vụ không bắt buộc gắn hồ sơ (ADR 0020). Mỗi loại được phân loại **cần / không cần số tờ khai** trước khi làm. Đặc tả: `docs/superpowers/specs/2026-11-20-nghiep-vu-khac-design.md`; quy tắc thêm loại mới: `.claude/rules/nghiep-vu-khac.md`.
+
+- **Bước 1 – đã làm**: màn danh sách `/customs/ops` (số định danh: lọc trạng thái / ngày / chi cục / lô, tìm số, đếm số sắp hết hạn), đăng ký số định danh theo lô, chọn số có sẵn ở ô 1.26/2.24 (§9.6). Màn đọc thẳng `customs_identifiers`.
+- **Chưa làm**: bảng `customs_ops` + chia tách vận đơn + HYS khai độc lập (bước 2), ghi nhận tay ngoài giờ / CFS / lệ phí CSHT (bước 3), gợi ý gắn hồ sơ (bước 4). Mục 9.4–9.5 mô tả luồng hiện tại (gắn hồ sơ) cho tới khi làm xong.
 
 ## 10. Cấu hình doanh nghiệp
 

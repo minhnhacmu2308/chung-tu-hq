@@ -168,13 +168,72 @@ export class InMemoryCustomsUow implements CustomsUow {
       },
       fieldAudit: this.fieldAudit.repo(org),
       identifiers: {
-        latest: async (orgId, dossierId) => clone([...d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId)].sort((a, b) => b.attempt - a.attempt)[0] ?? null),
+        latest: async (orgId, dossierId) => clone([...d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && !x.deletedAt)].sort((a, b) => b.attempt - a.attempt)[0] ?? null),
         get: async (orgId, id) => clone(d.identifiers.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
-        listStuckSending: async (orgId, before) => clone(d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "SENDING" && x.updatedAt < before)),
+        listStuckSending: async (orgId, before) => clone(d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "SENDING" && !x.deletedAt && x.updatedAt < before)),
         insert: async (row) => {
           if (row.orgId !== org) deny("customs_identifiers");
-          if (d.identifiers.some((x) => x.dossierId === row.dossierId && (x.attempt === row.attempt || (row.status === "SENDING" && x.status === "SENDING")))) throw new Error("duplicate key value violates unique constraint customs_identifiers_sending_uq");
+          if (row.dossierId !== null && d.identifiers.some((x) => !x.deletedAt && x.dossierId === row.dossierId && (x.attempt === row.attempt || (row.status === "SENDING" && x.status === "SENDING")))) throw new Error("duplicate key value violates unique constraint customs_identifiers_sending_uq");
           d.identifiers.push(clone(row));
+        },
+        insertMany: async (rows) => {
+          for (const row of rows) if (row.orgId !== org) deny("customs_identifiers");
+          const seen = [...d.identifiers];
+          for (const row of rows) {
+            if (row.batchId !== null && seen.some((x) => x.orgId === row.orgId && x.batchId === row.batchId && x.batchIndex === row.batchIndex)) throw new Error("duplicate key value violates unique constraint customs_identifiers_batch_uq");
+            seen.push(row);
+          }
+          d.identifiers.push(...clone(rows));
+        },
+        listByBatch: async (orgId, batchId) => clone(d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.batchId === batchId).sort((a, b) => (a.batchIndex ?? 0) - (b.batchIndex ?? 0))),
+        list: async (orgId, q, today) => {
+          const live = d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === null && !x.deletedAt);
+          const year = today.slice(0, 4);
+          const fresh = (x: IdentifierRow) => !x.identifiedOn || x.identifiedOn >= `${year}-01-01`;
+          const display = (x: IdentifierRow) => (x.status !== "ACCEPTED" ? x.status : x.usedAt ? "USED" : fresh(x) ? "AVAILABLE" : "EXPIRED");
+          const vnDay = (dt: Date) => new Date(dt.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+          const needle = q.q?.toLowerCase();
+          const hit = live.filter(
+            (x) =>
+              (!q.status || display(x) === q.status) && (!q.from || vnDay(x.sentAt) >= q.from) && (!q.to || vnDay(x.sentAt) <= q.to) && (!q.customsOffice || x.request.customsOffice === q.customsOffice) && (!q.batchId || x.batchId === q.batchId) &&
+              (!needle || [x.identifierNo, x.receiptNo, x.usedByDossierId].some((v) => v?.toLowerCase().includes(needle))),
+          );
+          // Mốc "từ YYYY-12-01" chỉ đúng vì hạn luôn là 31/12 (khớp isExpiringSoon) – đổi cùng lúc với repo Drizzle.
+          const expiring = hit.filter((x) => display(x) === "AVAILABLE" && today >= `${year}-12-01` && !!x.identifiedOn && x.identifiedOn <= `${year}-12-31`).length;
+          // Như Postgres: sent_at DESC, batch_index ASC NULLS LAST, id ASC.
+          const sorted = [...hit].sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime() || (a.batchIndex ?? Infinity) - (b.batchIndex ?? Infinity) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+          return clone({ items: sorted.slice(q.offset, q.offset + q.limit), total: hit.length, expiringCount: expiring });
+        },
+        markUsed: async (orgId, id, dossierId, now) => {
+          const x = d.identifiers.find((i) => i.id === id && i.orgId === org && i.orgId === orgId);
+          if (!x || x.dossierId !== null || x.usedAt || x.status !== "ACCEPTED" || x.deletedAt) return false;
+          x.usedAt = now;
+          x.usedByDossierId = dossierId;
+          x.updatedAt = now;
+          return true;
+        },
+        release: async (orgId, id, dossierId, now) => {
+          const x = d.identifiers.find((i) => i.id === id && i.orgId === org && i.orgId === orgId && i.usedByDossierId === dossierId);
+          if (!x) return false;
+          x.usedAt = null;
+          x.usedByDossierId = null;
+          x.updatedAt = now;
+          return true;
+        },
+        softDelete: async (orgId, ids, by, now) => {
+          const hit = d.identifiers.filter((i) => ids.includes(i.id) && i.orgId === org && i.orgId === orgId && i.dossierId === null && (i.status === "REJECTED" || i.status === "NO_RESPONSE") && !i.identifierNo && !i.deletedAt);
+          for (const x of hit) {
+            x.deletedAt = now;
+            x.deletedBy = by;
+            x.updatedAt = now;
+          }
+          return hit.map((x) => x.id);
+        },
+        retry: async (orgId, id, patch) => {
+          const x = d.identifiers.find((i) => i.id === id && i.orgId === org && i.orgId === orgId && (i.status === "REJECTED" || i.status === "NO_RESPONSE") && !i.deletedAt && !i.identifierNo && !i.dossierId);
+          if (!x) return false;
+          Object.assign(x, clone(patch));
+          return true;
         },
         update: async (orgId, id, patch) => {
           if (orgId !== org) deny(`customs_identifiers update orgId ${orgId} khác ngữ cảnh`);

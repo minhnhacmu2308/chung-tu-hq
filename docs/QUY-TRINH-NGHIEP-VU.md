@@ -431,6 +431,10 @@ Xin **số định danh hàng hóa** (kèm mã QR) để đưa hàng qua khu v�
 - **Xác nhận**: khi đã có số định danh, nút Gửi khai báo đổi thành **Xác nhận** – điền số định danh vào ô số vận đơn đang mở (người khai bấm Lưu để ghi tờ khai).
 - **Kẹt**: job mất (Redis lỗi ngay sau khi ghi) → stuck-sweeper (mỗi 5 phút): SENDING không đổi quá 15 phút, chưa có REF_ID thì đẩy lại gửi, đã có REF_ID thì "chưa phản hồi".
 
+### 9.7 Nghiệp vụ khác (đang thiết kế, chưa code)
+
+Menu **Nghiệp vụ khác** khai trước, theo dõi các nghiệp vụ phụ trợ thông quan; nghiệp vụ không bắt buộc gắn hồ sơ (ADR 0020). Mỗi loại được phân loại **cần / không cần số tờ khai** trước khi làm. Đặc tả: `docs/superpowers/specs/2026-11-20-nghiep-vu-khac-design.md`; quy tắc thêm loại mới: `.claude/rules/nghiep-vu-khac.md`. Mục 9.4–9.6 mô tả luồng hiện tại (gắn hồ sơ) cho tới khi làm xong.
+
 ## 10. Cấu hình doanh nghiệp
 
 Menu **Tài khoản & tích hợp**:

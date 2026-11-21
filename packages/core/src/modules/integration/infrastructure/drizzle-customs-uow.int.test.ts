@@ -450,6 +450,16 @@ describe("DrizzleCustomsUow – định danh theo lô (không gắn hồ sơ)", 
     expect(await uow.asOrg(A, (r) => r.identifiers.softDelete("org_anphat", ["b7_dos_rej"], "usr_chau", now))).toEqual([]);
     expect((await uow.asOrg(A, (r) => r.identifiers.get("org_anphat", "b7_dos_rej")))?.deletedAt).toBeNull();
   });
+  it("list_filters_by_issued_tax_code", async () => {
+    // Kho "Chọn số có sẵn" chỉ lấy số cấp cho MST doanh nghiệp đang đăng nhập.
+    await uow.asOrg(A, (r) => r.identifiers.insertMany([
+      bi("b9_mine", "bat9", 1),
+      bi("b9_other", "bat9", 2, { request: { objectType: "1", goodsType: "1", customsOffice: "01B1", taxCode: "0399999999", companyName: "KHÁC" } }),
+    ]));
+    const mine = await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", q("bat9", { taxCode: "0316789012" }), TODAY));
+    expect(mine.items.map((x) => x.id)).toEqual(["b9_mine"]);
+    expect((await uow.asOrg(A, (r) => r.identifiers.list("org_anphat", q("bat9"), TODAY))).total).toBe(2);
+  });
   it("retry_only_failed_live_row_without_number", async () => {
     await uow.asOrg(A, (r) => r.identifiers.insertMany([
       bi("b8_rej", "bat8", 1, { status: "REJECTED", identifierNo: null, identifiedOn: null }),

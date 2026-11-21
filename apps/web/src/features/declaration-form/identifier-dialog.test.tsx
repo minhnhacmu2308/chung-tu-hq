@@ -133,7 +133,7 @@ describe("Panel Khai báo định danh – chọn số có sẵn", () => {
     expect(onIdentifier).not.toHaveBeenCalled();
   }, 30_000);
 
-  it("mỗi số hiện MST / chi cục được cấp; số cùng MST hồ sơ lên đầu", async () => {
+  it("chỉ hiện số cấp cho MST doanh nghiệp đang đăng nhập (0316789012), kèm MST / chi cục", async () => {
     const other = await requestIdentifierBatch({ clientKey: "22222222-2222-4222-8222-222222222222", count: 1, request: { ...REQ, taxCode: "0399999999", customsOffice: "01B1", companyName: "KHÁC" } });
     await pollIdentifierRow(other.ids[0]!);
     const { no } = await seed();
@@ -141,7 +141,8 @@ describe("Panel Khai báo định danh – chọn số có sẵn", () => {
     const pool = await openPool();
     await within(pool).findByText(no, undefined, T);
     const lines = within(pool).getAllByText(/^Cấp cho MST/).map((e) => e.textContent);
-    expect(lines).toEqual(["Cấp cho MST 0316789012 · Chi cục 03CE · AN PHÁT", "Cấp cho MST 0399999999 · Chi cục 01B1 · KHÁC"]);
+    expect(lines).toEqual(["Cấp cho MST 0316789012 · Chi cục 03CE · AN PHÁT"]);
+    expect(within(pool).queryByText(/0399999999/)).toBeNull();
     expect(within(pool).queryByText(/^Còn \d+ số nữa/)).toBeNull();
   }, 30_000);
 

@@ -69,6 +69,8 @@ export const IdentifierListQuerySchema = PageQuerySchema.extend({
   from: IsoDateSchema.optional(),
   to: IsoDateSchema.optional(),
   customsOffice: z.string().optional(),
+  /** MST được cấp (request.taxCode) – kho "Chọn số có sẵn" chỉ lấy số của MST doanh nghiệp đang đăng nhập. */
+  taxCode: z.string().trim().min(1).max(14).optional(),
   batchId: z.string().optional(),
   q: z.string().trim().max(50).optional(),
 });

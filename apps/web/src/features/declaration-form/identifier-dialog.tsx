@@ -9,8 +9,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ListPlus, QrCode } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { customsOpsKeys, listIdentifiers, takeIdentifier, type IdentifierListItem } from "@/api/customs-ops";
+import { customsOpsKeys, listIdentifiers, takeIdentifier } from "@/api/customs-ops";
 import { getIdentifier, identifierKeys, pollIdentifier, sendIdentifier, type IdentifierView } from "@/api/identifier";
+import { getOrganization, settingsKeys } from "@/api/settings";
 import { LoadError } from "@/components/common/load-error";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -115,18 +116,20 @@ function IdentifierResult({ record, blocks }: { record: IdentifierRecord; blocks
   );
 }
 
-// Lấy tối đa 200 số (giới hạn PageQuerySchema); còn nữa thì báo "còn N số".
-const POOL_QUERY = { status: "AVAILABLE", limit: 200 } as const;
+// Lấy tối đa 200 số (giới hạn PageQuerySchema) của MST doanh nghiệp đang đăng nhập; còn nữa thì báo "còn N số".
+const poolQuery = (taxCode: string) => ({ status: "AVAILABLE", limit: 200, taxCode }) as const;
 
 /**
  * "Chọn số có sẵn": số định danh xin theo lô ở màn Nghiệp vụ khác (/customs/ops) còn dùng được. Chọn → giữ số cho hồ sơ (takeIdentifier)
  * rồi mới điền; số vừa bị hồ sơ khác giữ → báo lỗi (IDENTIFIER_TAKEN) và tải lại danh sách. Đại lý giữ số cho nhiều MST: mỗi dòng hiện MST/chi cục
- * được cấp, số cùng MST của hồ sơ lên đầu, rồi số hết hạn sớm trước.
+ * được cấp. Chỉ hiện số cấp cho MST của doanh nghiệp đang đăng nhập (quyết định 21/11/2026); số hết hạn sớm trước.
  */
-function IdentifierPool({ dossierId, taxCode, onPicked }: { dossierId: string; taxCode: string; onPicked: (identifierNo: string, id: string) => void }) {
+function IdentifierPool({ dossierId, onPicked }: { dossierId: string; onPicked: (identifierNo: string, id: string) => void }) {
   const m = useMessages(IDENTIFIER_MESSAGES);
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: customsOpsKeys.identifiers(POOL_QUERY), queryFn: () => listIdentifiers(POOL_QUERY) });
+  const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  const taxCode = org.data?.taxCode ?? "";
+  const q = useQuery({ queryKey: customsOpsKeys.identifiers(poolQuery(taxCode)), queryFn: () => listIdentifiers(poolQuery(taxCode)), enabled: taxCode !== "" });
   const take = useMutation({
     mutationFn: (id: string) => takeIdentifier(id, dossierId),
     onSuccess: ({ identifierNo }, id) => {
@@ -138,8 +141,7 @@ function IdentifierPool({ dossierId, taxCode, onPicked }: { dossierId: string; t
       void qc.invalidateQueries({ queryKey: customsOpsKeys.all });
     },
   });
-  const mine = (r: IdentifierListItem) => (r.request.taxCode === taxCode ? 0 : 1);
-  const items = [...(q.data?.items ?? [])].sort((a, b) => mine(a) - mine(b) || (a.identifiedOn ?? "").localeCompare(b.identifiedOn ?? ""));
+  const items = [...(q.data?.items ?? [])].sort((a, b) => (a.identifiedOn ?? "").localeCompare(b.identifiedOn ?? ""));
   const more = (q.data?.total ?? 0) - items.length;
   return (
     <Card aria-label={m.poolTitle}>
@@ -148,8 +150,8 @@ function IdentifierPool({ dossierId, taxCode, onPicked }: { dossierId: string; t
           <span className="text-sm font-semibold">{m.poolTitle}</span>
           <span className="text-sm text-fg-muted">{m.poolHint}</span>
         </Stack>
-        {q.isError ? (
-          <LoadError title={m.poolLoadFailed} onRetry={() => void q.refetch()} />
+        {q.isError || org.isError ? (
+          <LoadError title={m.poolLoadFailed} onRetry={() => void (org.isError ? org.refetch() : q.refetch())} />
         ) : q.isPending ? (
           <SkeletonCard lines={2} />
         ) : items.length === 0 ? (
@@ -307,7 +309,7 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
                 {"solution" in e && e.solution ? ` → ${e.solution}` : ""}
               </Alert>
             ))}
-          {onConfirm && <IdentifierPool dossierId={dossierId} taxCode={values[REQUEST_KEYS.taxCode] ?? ""} onPicked={confirm} />}
+          {onConfirm && <IdentifierPool dossierId={dossierId} onPicked={confirm} />}
           {missing.length > 0 && <Alert tone="danger" title={m.missingTitle}>{fill(m.missing, { fields: missing.join(", ") })}</Alert>}
 
           {form.blocks.map((b) => (

@@ -192,7 +192,7 @@ function repos(tx: Tx): CustomsRepos {
           // Kho số theo lô: bỏ dòng gửi từ hồ sơ (dossier_id có giá trị) – số đó đã nằm trong hồ sơ ấy.
           eq(c.orgId, orgId), isNull(c.dossierId), isNull(c.deletedAt), statusCond,
           q.from ? sql`${vnDay} >= ${q.from}::date` : undefined, q.to ? sql`${vnDay} <= ${q.to}::date` : undefined,
-          q.customsOffice ? sql`${c.request}->>'customsOffice' = ${q.customsOffice}` : undefined, q.batchId ? eq(c.batchId, q.batchId) : undefined,
+          q.customsOffice ? sql`${c.request}->>'customsOffice' = ${q.customsOffice}` : undefined, q.taxCode ? sql`${c.request}->>'taxCode' = ${q.taxCode}` : undefined, q.batchId ? eq(c.batchId, q.batchId) : undefined,
           like ? or(ilike(c.identifierNo, like), ilike(c.receiptNo, like), ilike(c.usedByDossierId, like)) : undefined,
         );
         const items = (await tx.select().from(c).where(where).orderBy(desc(c.sentAt), asc(c.batchIndex), asc(c.id)).limit(q.limit).offset(q.offset)).map(toIdentifier);

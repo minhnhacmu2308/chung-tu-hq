@@ -3,7 +3,7 @@
 // còn dòng Đang gửi → tải lại mỗi 5 giây. Chỉ dòng lỗi (bị từ chối / chưa phản hồi, chưa có số) chọn được để Gửi lại / Xóa.
 import { IdentifierDisplayStatusSchema, IsoDateSchema, type IdentifierDisplayStatus, type IdentifierListItem, type IdentifierListQuery } from "@kb/contracts";
 import {
-  Abbreviation, Alert, Badge, Barcode, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, DataTableFilterSelect, DateRangePicker, Dialog, Field, fill, Input,
+  Abbreviation, Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, DataTableFilterSelect, DateRangePicker, Dialog, Field, fill, Input,
   PageHeader, pickMessages, RowActions, Stack, StatusBadge, statusLabel, toast, useUiLocale, type Status, type UiLocale,
 } from "@kb/ui";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,12 +49,7 @@ const buildColumns = (locale: UiLocale, officeName: (code: string) => string | u
       cell: (c) => {
         const r = c.row.original;
         if (!r.identifierNo) return <span className="text-sm text-fg-muted">{t.noNumber}</span>;
-        return (
-          <span className="inline-flex items-center gap-2">
-            {r.qrPng && <Barcode type="png" size="xs" surface="scan" value={r.qrPng} label={fill(t.qrLabel, { no: r.identifierNo })} />}
-            <span className="font-mono text-sm">{r.identifierNo}</span>
-          </span>
-        );
+        return <span className="font-mono text-sm">{r.identifierNo}</span>;
       },
     }),
     col.accessor("batchId", {
@@ -293,7 +288,8 @@ function PageInner() {
           emptyTitle={t.emptyTitle}
           emptyDescription={t.emptyDescription}
           emptyAction={<Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setRegistering(true)}>{t.register}</Button>}
-          selectable
+          // Chỉ dòng lỗi xóa được: không có dòng nào như vậy thì ẩn cột chọn, khỏi hiện ô "chọn tất cả" bấm không ăn.
+          selectable={rows.some(canDelete)}
           isRowSelectable={canDelete}
           selectionActions={(picked, clear) => {
             const retryable = picked.filter(canRetry);

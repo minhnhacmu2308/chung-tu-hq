@@ -59,7 +59,7 @@ Thiết kế:
 - Lô xong (mọi dòng ACCEPTED / REJECTED / NO_RESPONSE) → thông báo người tạo, vd "Lô 10 định danh: 9 có số, 1 bị từ chối". Mỗi lần gọi FPT ghi `usage_events`.
 - **Hạn dùng**: tính từ `identified_on` (`YYYY-12-31`), không lưu cột. Chưa dùng mà qua ngày đó (giờ Việt Nam) → **Hết hạn**, không chọn được ở 1.26/2.24.
   Từ 01/12 cảnh báo "Hết hạn 31/12" trên số chưa dùng và dòng tổng "Còn N số chưa dùng sẽ hết hạn 31/12".
-- **Dùng số**: panel ô 1.26/2.24 chọn số chưa dùng, chưa hết hạn từ kho. Thứ tự: (1) giữ số bằng `UPDATE … SET used_at, used_by_dossier_id WHERE used_at IS NULL`
+- **Dùng số**: panel ô 1.26/2.24 chọn số chưa dùng, chưa hết hạn từ kho – chỉ số cấp cho MST của doanh nghiệp đang đăng nhập (chốt 21/11/2026; màn danh sách vẫn hiện mọi MST). Thứ tự: (1) giữ số bằng `UPDATE … SET used_at, used_by_dossier_id WHERE used_at IS NULL`
   (hai hồ sơ cùng chọn chỉ một bên được); (2) điền ô và ghi `field_audit` trong transaction của module tờ khai; bước (2) lỗi thì trả số lại (`used_at = NULL`).
 - **Lọc**: trạng thái (Đang gửi · Có số – chưa dùng · Đã dùng · Hết hạn · Bị từ chối · Chưa phản hồi), ngày đăng ký, chi cục, lô; tìm số định danh / số tiếp nhận / hồ sơ đã dùng.
 - **Xóa dòng lỗi** để làm sạch dữ liệu: chọn nhiều + nút "Xóa các dòng lỗi" theo bộ lọc.

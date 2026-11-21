@@ -58,6 +58,7 @@ export const listIdentifiers = (input: Partial<IdentifierListQuery>) =>
       .filter((r) => !q.status || displayStatus(r, today) === q.status)
       .filter((r) => (!q.from || vnToday(Date.parse(r.sentAt)) >= q.from) && (!q.to || vnToday(Date.parse(r.sentAt)) <= q.to))
       .filter((r) => !q.customsOffice || r.request.customsOffice === q.customsOffice)
+      .filter((r) => !q.taxCode || r.request.taxCode === q.taxCode)
       .filter((r) => !q.batchId || r.batchId === q.batchId)
       .filter((r) => !needle || [r.identifierNo, r.receiptNo, r.usedByDossierId].some((v) => v?.toLowerCase().includes(needle)))
       .sort((a, b) => b.sentAt.localeCompare(a.sentAt) || (a.batchIndex ?? 0) - (b.batchIndex ?? 0));

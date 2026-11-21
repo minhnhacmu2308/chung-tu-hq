@@ -195,7 +195,7 @@ export class InMemoryCustomsUow implements CustomsUow {
           const needle = q.q?.toLowerCase();
           const hit = live.filter(
             (x) =>
-              (!q.status || display(x) === q.status) && (!q.from || vnDay(x.sentAt) >= q.from) && (!q.to || vnDay(x.sentAt) <= q.to) && (!q.customsOffice || x.request.customsOffice === q.customsOffice) && (!q.batchId || x.batchId === q.batchId) &&
+              (!q.status || display(x) === q.status) && (!q.from || vnDay(x.sentAt) >= q.from) && (!q.to || vnDay(x.sentAt) <= q.to) && (!q.customsOffice || x.request.customsOffice === q.customsOffice) && (!q.taxCode || x.request.taxCode === q.taxCode) && (!q.batchId || x.batchId === q.batchId) &&
               (!needle || [x.identifierNo, x.receiptNo, x.usedByDossierId].some((v) => v?.toLowerCase().includes(needle))),
           );
           // Mốc "từ YYYY-12-01" chỉ đúng vì hạn luôn là 31/12 (khớp isExpiringSoon) – đổi cùng lúc với repo Drizzle.

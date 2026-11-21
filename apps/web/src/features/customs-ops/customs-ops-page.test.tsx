@@ -137,6 +137,15 @@ describe("Nghiệp vụ khác – danh sách số định danh", () => {
     await waitFor(() => expect(within(tb).queryByText("Bị từ chối")).toBeNull(), T);
   }, 30_000);
 
+  it("không có dòng lỗi nào → không hiện cột chọn (kể cả ô Chọn tất cả)", async () => {
+    seed();
+    nav.set("status=AVAILABLE");
+    renderWithProviders(<CustomsOpsPage />);
+    const tb = await table();
+    await within(tb).findByText("122600000000001", {}, T);
+    expect(within(tb).queryAllByRole("checkbox")).toHaveLength(0);
+  }, 30_000);
+
   it("Gửi lại có dòng chưa phản hồi → hỏi lại (cảnh báo phí FPT), đồng ý mới gửi", async () => {
     seed();
     const retry = vi.spyOn(api, "retryIdentifier");
